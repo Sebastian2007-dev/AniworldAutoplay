@@ -30,58 +30,77 @@ chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
 });
 
 // ── Settings ──────────────────────────────────────────────────────────────────
-const SETTING_KEYS = {
-  autoplay:          's-autoplay',
-  autoSkipIntro:     's-autoSkipIntro',
-  playbackMem:       's-playbackMem',
-  useAniSkip:        's-useAniSkip',
-  notifications:     's-notifications',
-  animeSkipClientId: 's-animeSkipClientId',
-};
+// Settings stored as properties inside DataStore JSON objects in chrome.storage.local.
+// storeKey = the chrome.storage key holding the JSON blob
+// prop     = the property inside that JSON blob
+// default  = fallback value when the store doesn't exist yet
+const NESTED_SETTINGS = [
+  { elId: 's-autoplay',      storeKey: 'coreSettings',     prop: 'isAutoplayEnabled',    default: false },
+  { elId: 's-autoSkipIntro', storeKey: 'coreSettings',     prop: 'autoSkipIntro',         default: true  },
+  { elId: 's-playbackMem',   storeKey: 'mainSettings',     prop: 'playbackPositionMemory',default: true  },
+  { elId: 's-useAniSkip',    storeKey: 'advancedSettings', prop: 'useAniSkip',            default: true  },
+  { elId: 's-notifications', storeKey: 'advancedSettings', prop: 'showAniSkipNotifications', default: true },
+];
 
-// Storage key mapping: popup id → chrome.storage.local key
-// The content script stores settings under these keys via GM_setValue
-const STORAGE_MAP = {
-  's-autoplay':          'aw_autoplay',
-  's-autoSkipIntro':     'aw_autoSkipIntro',
-  's-playbackMem':       'aw_playbackMem',
-  's-useAniSkip':        'useAniSkip',
-  's-notifications':     'aw_notifications',
-  's-animeSkipClientId': 'animeSkipClientId',
-};
-
-const DEFAULTS = {
-  'aw_autoplay':       true,
-  'aw_autoSkipIntro':  true,
-  'aw_playbackMem':    true,
-  'useAniSkip':        true,
-  'aw_notifications':  true,
-  'animeSkipClientId': '',
-};
+// Flat settings stored directly as top-level chrome.storage.local keys
+const FLAT_SETTINGS = [
+  { elId: 's-animeSkipClientId', storageKey: 'animeSkipClientId',      default: ''  },
+  { elId: 's-skipTimesLimit',    storageKey: 'aw_local_skiptimes_limit', default: 500 },
+];
 
 async function loadSettings() {
-  const storageKeys = Object.values(STORAGE_MAP);
-  const data = await chrome.storage.local.get(storageKeys);
+  const storeKeys = [...new Set(NESTED_SETTINGS.map(s => s.storeKey)), ...FLAT_SETTINGS.map(s => s.storageKey)];
+  const data = await chrome.storage.local.get(storeKeys);
 
-  for (const [elId, storageKey] of Object.entries(STORAGE_MAP)) {
+  for (const { elId, storeKey, prop, default: def } of NESTED_SETTINGS) {
     const el = document.getElementById(elId);
     if (!el) continue;
-    const val = data[storageKey] !== undefined ? data[storageKey] : DEFAULTS[storageKey];
-    if (el.type === 'checkbox') {
-      el.checked = !!val;
-    } else {
-      el.value = val || '';
-    }
+    let storeObj = {};
+    try { storeObj = JSON.parse(data[storeKey]) || {}; } catch (_) {}
+    const val = prop in storeObj ? storeObj[prop] : def;
+    el.checked = !!val;
   }
+
+  for (const { elId, storageKey, default: def } of FLAT_SETTINGS) {
+    const el = document.getElementById(elId);
+    if (!el) continue;
+    const val = data[storageKey] !== undefined ? data[storageKey] : def;
+    el.value = el.type === 'number' ? Number(val) : (val || '');
+  }
+
+  // Show current local skip-times entry count
+  const allKeys = await chrome.storage.local.get(null);
+  const count = Object.keys(allKeys).filter(k => k.startsWith('aw_local_skiptimes::')).length;
+  const countEl = document.getElementById('skipTimesCount');
+  if (countEl) countEl.textContent = `${count} Einträge aktuell gespeichert`;
 }
 
 document.getElementById('saveSettings').addEventListener('click', async () => {
+  const storeKeys = [...new Set(NESTED_SETTINGS.map(s => s.storeKey))];
+  const data = await chrome.storage.local.get(storeKeys);
+
+  // Update each nested JSON blob
   const toSave = {};
-  for (const [elId, storageKey] of Object.entries(STORAGE_MAP)) {
+  for (const { elId, storeKey, prop } of NESTED_SETTINGS) {
     const el = document.getElementById(elId);
     if (!el) continue;
-    toSave[storageKey] = el.type === 'checkbox' ? el.checked : el.value.trim();
+    if (!toSave[storeKey]) {
+      try { toSave[storeKey] = JSON.parse(data[storeKey]) || {}; } catch (_) { toSave[storeKey] = {}; }
+    }
+    toSave[storeKey][prop] = el.checked;
   }
+  // Serialize back to JSON strings
+  for (const key of Object.keys(toSave)) {
+    toSave[key] = JSON.stringify(toSave[key]);
+  }
+
+  // Flat settings
+  for (const { elId, storageKey } of FLAT_SETTINGS) {
+    const el = document.getElementById(elId);
+    if (!el) continue;
+    toSave[storageKey] = el.type === 'number' ? Number(el.value) : el.value.trim();
+  }
+
   await chrome.storage.local.set(toSave);
 
   const hint = document.getElementById('saveHint');
@@ -90,6 +109,24 @@ document.getElementById('saveSettings').addEventListener('click', async () => {
 });
 
 loadSettings();
+
+// ── Edit skip times ───────────────────────────────────────────────────────────
+function openSkipTimesDialog(dialogType) {
+  const btnId = dialogType === 'outro' ? 'editOutroTimes' : 'editIntroTimes';
+  const btn = document.getElementById(btnId);
+  chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
+    if (!tab?.id) return;
+    chrome.tabs.sendMessage(tab.id, { type: 'OPEN_SKIP_TIMES_DIALOG', dialogType }, (res) => {
+      if (chrome.runtime.lastError || !res?.ok) {
+        const orig = btn.textContent;
+        btn.textContent = 'Kein AniSkip';
+        setTimeout(() => { btn.textContent = orig; }, 2000);
+      }
+    });
+  });
+}
+document.getElementById('editIntroTimes').addEventListener('click', () => openSkipTimesDialog('intro'));
+document.getElementById('editOutroTimes').addEventListener('click', () => openSkipTimesDialog('outro'));
 
 // ── Clear AniSkip no-data cache ───────────────────────────────────────────────
 document.getElementById('clearNoDataCache').addEventListener('click', async () => {
@@ -199,6 +236,19 @@ function buildEntryEl(entry) {
   div.appendChild(msg);
   return div;
 }
+
+// ── Clear local skip times ────────────────────────────────────────────────────
+document.getElementById('clearLocalSkipTimes').addEventListener('click', async () => {
+  const btn = document.getElementById('clearLocalSkipTimes');
+  const allKeys = await chrome.storage.local.get(null);
+  const keysToDelete = Object.keys(allKeys).filter(k => k.startsWith('aw_local_skiptimes::'));
+  if (keysToDelete.length > 0) await chrome.storage.local.remove(keysToDelete);
+  const orig = btn.textContent;
+  btn.textContent = `${keysToDelete.length} gelöscht`;
+  const countEl = document.getElementById('skipTimesCount');
+  if (countEl) countEl.textContent = '0 Einträge aktuell gespeichert';
+  setTimeout(() => { btn.textContent = orig; }, 2000);
+});
 
 // ── Connect to background for live logs ───────────────────────────────────────
 function connectToBackground() {

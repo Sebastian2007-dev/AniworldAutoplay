@@ -1,6 +1,16 @@
 (async function() {
     'use strict';
 
+    // Only run on allowed domains (top-level frame check).
+    // Iframes are still allowed on any domain to support embedded video players (voe.sx etc.).
+    const ALLOWED_HOSTS = ['aniworld.to', 's.to', 'serienstream.to'];
+    if (window === window.top) {
+        const host = location.hostname.replace(/^www\./, '');
+        if (!ALLOWED_HOSTS.some(d => host === d || host.endsWith('.' + d))) {
+            return;
+        }
+    }
+
     // Wait for chrome.storage.local to be fully loaded into the sync cache
     await GMCompat.init();
 
@@ -91,6 +101,19 @@
                 keys.forEach(k => GM_deleteValue(k));
                 console.log(`[AniSkip] Cleared ${keys.length} cache entries (nodata + animeskip)`);
                 sendResponse({ cleared: keys.length });
+            }
+
+            if (msg.type === 'OPEN_SKIP_TIMES_DIALOG') {
+                const available = GM_getValue('_aniSkipAvailable', 0);
+                console.log('[AniSkip] OPEN_SKIP_TIMES_DIALOG received — available:', !!available);
+                if (available) {
+                    // Trigger the listener registered in the video-player iframe
+                    GM_setValue('aw_open_skip_dialog', { ts: Date.now(), type: msg.dialogType || 'intro' });
+                    sendResponse({ ok: true });
+                } else {
+                    sendResponse({ ok: false });
+                }
+                return true;
             }
         });
     }
@@ -809,6 +832,82 @@
                 console.error('[AniSkip] Submit failed:', e);
                 return { success: false, error: e.message };
             }
+        },
+
+        // Save intro/outro times locally (chrome.storage.local via GM_setValue)
+        // intro/outro: { start, end } or null to leave unchanged
+        saveLocalSkipTimes(slug, season, episode, intro, outro) {
+            const key = `aw_local_skiptimes::${slug}::s${season ?? 1}::e${episode}`;
+            const existing = GM_getValue(key, null) || {};
+            const updated = {
+                intro: intro !== undefined ? intro : (existing.intro || null),
+                outro: outro !== undefined ? outro : (existing.outro || null),
+                _savedAt: Date.now()
+            };
+            GM_setValue(key, updated);
+            console.log('[AniSkip] Saved locally:', updated);
+            this.pruneLocalSkipTimes();
+        },
+
+        pruneLocalSkipTimes() {
+            const limit = GM_getValue('aw_local_skiptimes_limit', 500);
+            const keys = GM_listValues().filter(k => k.startsWith('aw_local_skiptimes::'));
+            if (keys.length <= limit) return;
+            const sorted = keys
+                .map(k => ({ k, t: (GM_getValue(k, null)?._savedAt ?? 0) }))
+                .sort((a, b) => a.t - b.t);
+            sorted.slice(0, keys.length - limit).forEach(({ k }) => GM_deleteValue(k));
+        },
+
+        // Get locally saved skip times for an episode
+        getLocalSkipTimes(slug, season, episode) {
+            const key = `aw_local_skiptimes::${slug}::s${season ?? 1}::e${episode}`;
+            return GM_getValue(key, null);
+        },
+
+        // Submit outro (ED) times to AniSkip API
+        async submitOutroTimes(malId, episode, episodeLength, outroStart, outroEnd) {
+            if (!malId || !episode) return { success: false, error: 'Missing MAL ID or episode' };
+            if (!Number.isFinite(outroStart) || !Number.isFinite(outroEnd)) {
+                return { success: false, error: 'Invalid times' };
+            }
+            if (outroEnd <= outroStart) {
+                return { success: false, error: 'End must be greater than start' };
+            }
+            try {
+                const url = `https://api.aniskip.com/v2/skip-times/${encodeURIComponent(malId)}/${encodeURIComponent(episode)}`;
+                const generateUUID = () => 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+                    const r = Math.random() * 16 | 0;
+                    return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+                });
+                const payload = {
+                    skipType: 'ed',
+                    startTime: outroStart,
+                    endTime: outroEnd,
+                    episodeLength: episodeLength,
+                    providerName: 'Aniworld',
+                    submitterId: generateUUID()
+                };
+                console.log('[AniSkip] Submitting outro:', payload, 'to URL:', url);
+                const response = await new Promise((resolve, reject) => {
+                    GM_xmlhttpRequest({
+                        method: 'POST',
+                        url: url,
+                        headers: { 'Content-Type': 'application/json' },
+                        data: JSON.stringify(payload),
+                        onload: (response) => resolve(response),
+                        onerror: (error) => reject(error)
+                    });
+                });
+                if (response.status >= 200 && response.status < 300) {
+                    return { success: true };
+                } else {
+                    return { success: false, error: response.responseText || `Server returned ${response.status}` };
+                }
+            } catch (e) {
+                console.error('[AniSkip] Outro submit failed:', e);
+                return { success: false, error: e.message };
+            }
         }
     };
 
@@ -1097,98 +1196,15 @@
         },
     };
 
-    // ============================================================
-    // IntroDB Module (introdb.app) — Intro/Outro data for TV series
-    // ============================================================
-    const IntroDBModule = {
-        API_BASE: 'https://api.introdb.app',
-
-        makeSkipCacheKey(imdbId, season, episode) {
-            return `aw_introdb::${imdbId}::s${season}::e${episode}`;
-        },
-
-        async getSegments(imdbId, season, episode) {
-            if (!imdbId || !season || !episode) return null;
-
-            const cacheKey = this.makeSkipCacheKey(imdbId, season, episode);
-            const cached = localStorage.getItem(cacheKey);
-            if (cached) {
-                try {
-                    const data = JSON.parse(cached);
-                    if (data._cachedAt && Date.now() - data._cachedAt < 7 * 24 * 60 * 60 * 1000) {
-                        console.log('[IntroDB] Using cached data');
-                        return data.result;
-                    }
-                    localStorage.removeItem(cacheKey);
-                } catch {}
-            }
-
-            const url = `${this.API_BASE}/segments?imdb_id=${encodeURIComponent(imdbId)}&season=${season}&episode=${episode}`;
-            console.log('[IntroDB] Fetching:', url);
-
-            try {
-                const result = await this.gmFetch(url);
-                const parsed = this.parseSegments(result);
-                localStorage.setItem(cacheKey, JSON.stringify({ result: parsed, _cachedAt: Date.now() }));
-                return parsed;
-            } catch (e) {
-                console.error('[IntroDB] Fetch error:', e);
-                return null;
-            }
-        },
-
-        gmFetch(url) {
-            return new Promise((resolve, reject) => {
-                GM_xmlhttpRequest({
-                    method: 'GET',
-                    url,
-                    headers: { 'Accept': 'application/json' },
-                    timeout: 8000,
-                    onload: (res) => {
-                        if (res.status === 404) { resolve(null); return; }
-                        if (res.status < 200 || res.status >= 300) {
-                            reject(new Error(`[IntroDB] HTTP ${res.status}`));
-                            return;
-                        }
-                        try { resolve(JSON.parse(res.responseText)); }
-                        catch (e) { reject(e); }
-                    },
-                    onerror: () => reject(new Error('[IntroDB] Network error')),
-                    ontimeout: () => reject(new Error('[IntroDB] Timeout')),
-                });
-            });
-        },
-
-        parseSegments(data) {
-            if (!data) return null;
-            const segments = Array.isArray(data) ? data : (data.segments || data.results || []);
-            if (!segments.length) return null;
-
-            const result = { intro: null, outro: null };
-            for (const seg of segments) {
-                const type = (seg.type || seg.segment_type || '').toLowerCase();
-                const start = parseFloat(seg.start ?? seg.start_sec ?? seg.startTime);
-                const end = parseFloat(seg.end ?? seg.end_sec ?? seg.endTime);
-                if (!Number.isFinite(start) || !Number.isFinite(end)) continue;
-
-                if ((type === 'intro' || type === 'op') && !result.intro) {
-                    result.intro = { start, end, type };
-                } else if ((type === 'outro' || type === 'credits' || type === 'ed') && !result.outro) {
-                    result.outro = { start, end, type };
-                }
-            }
-            return (result.intro || result.outro) ? result : null;
-        },
-    };
-
     // Localization setup
     const userLang = navigator.language.startsWith('de') ? 'de' : 'en';
 
     // Global storage for AniSkip data (accessible by all functions)
     let globalAniSkipData = null;
 
+
     // Session storage for submit dialog values (resets on page reload)
-    let submitDialogValues = { start: null, end: null };
+    let submitDialogValues = { introStart: null, introEnd: null, outroStart: null, outroEnd: null };
 
     const localizations = {
         en: {
@@ -1710,15 +1726,6 @@ const DEFAULT_SETTINGS_LAYOUT = {
                 },
 
                 set: (obj, prop, value) => {
-                    // Sync with latest stored value before writing to avoid overwriting
-                    // changes made by other frames (e.g. top-scope saves language pref,
-                    // player-iframe saves volume → would otherwise clobber language pref).
-                    try {
-                        const latest = JSON.parse(GM_getValue(obj.__uuid));
-                        if (latest && typeof latest === 'object') {
-                            Object.assign(obj.__storage, latest);
-                        }
-                    } catch {}
                     obj.__storage[prop] = value;
                     GM_setValue(obj.__uuid, JSON.stringify(obj.__storage));
 
@@ -2451,7 +2458,7 @@ const DEFAULT_SETTINGS_LAYOUT = {
 
 
     // Create "Skip ED" button — mirrors setupSkipIntroButton but for the outro
-    function setupSkipEdButton(player) {
+    function setupSkipEdButton(player, iframeInterface = null) {
         const ED_BTN_STYLE = `
     .SkipEdBtn {
       position: fixed;
@@ -2472,6 +2479,25 @@ const DEFAULT_SETTINGS_LAYOUT = {
     }
     .SkipEdBtn:hover { background-color: rgba(80, 0, 0, 0.85); }
     .SkipEdBtn.invisible { opacity: 0; pointer-events: none; }
+    .SubmitOutroEdBtn {
+      position: fixed;
+      bottom: 120px;
+      right: 5px;
+      padding: 8px 12px;
+      font-size: 13px;
+      font-weight: bold;
+      font-family: sans-serif;
+      color: white;
+      background-color: rgba(0, 0, 0, 0.55);
+      border: 2px solid #ff4444;
+      text-transform: uppercase;
+      cursor: pointer;
+      opacity: 1;
+      transition: background-color 130ms, opacity 200ms;
+      z-index: 9999;
+    }
+    .SubmitOutroEdBtn:hover { background-color: rgba(80, 0, 0, 0.85); }
+    .SubmitOutroEdBtn.invisible { opacity: 0; pointer-events: none; }
   `;
         GM_addStyle(ED_BTN_STYLE);
 
@@ -2480,7 +2506,6 @@ const DEFAULT_SETTINGS_LAYOUT = {
         button.textContent = userLang === 'de' ? 'ED überspringen' : 'Skip ED';
 
         button.addEventListener('click', () => {
-            GM_setValue('aw_user_nav_ts', Date.now());
             if (globalAniSkipData && globalAniSkipData.outro) {
                 player.currentTime = globalAniSkipData.outro.end;
                 if (advancedSettings[ADVANCED_SETTINGS_MAP.playOnLargeSkip]) player.play();
@@ -2488,12 +2513,28 @@ const DEFAULT_SETTINGS_LAYOUT = {
             button.remove();
         });
 
+        // "Submit Outro" button — shown alongside Skip ED so user can override times
+        const submitBtn = document.createElement('button');
+        submitBtn.className = 'SubmitOutroEdBtn invisible';
+        submitBtn.textContent = userLang === 'de' ? '✎ Outro einreichen' : '✎ Submit Outro';
+        submitBtn.addEventListener('click', () => {
+            if (iframeInterface) {
+                iframeInterface._openSkipTimesDialog(null, iframeInterface.episodeNumber, null, true, 'outro');
+            }
+        });
+
         const insertButton = () => {
             const loadX = document.querySelector('.jw-controlbar');
             const speedFiles = document.querySelector('#my-video');
             const voe = document.querySelector('.jw-controls');
-            if (loadX) loadX.appendChild(button);
-            else if (speedFiles || voe) document.body.appendChild(button);
+            const container = loadX || (speedFiles && document.body) || (voe && document.body);
+            if (loadX) {
+                loadX.appendChild(button);
+                if (iframeInterface) loadX.appendChild(submitBtn);
+            } else if (speedFiles || voe) {
+                document.body.appendChild(button);
+                if (iframeInterface) document.body.appendChild(submitBtn);
+            }
         };
 
         waitForElement('.jw-controlbar, #my-video, .jw-controls', {
@@ -2502,23 +2543,30 @@ const DEFAULT_SETTINGS_LAYOUT = {
         }, insertButton);
 
         document.addEventListener('fullscreenchange', () => {
-            button.style.bottom = document.fullscreenElement ? '80px' : '57px';
+            const fs = document.fullscreenElement;
+            button.style.bottom = fs ? '80px' : '57px';
+            submitBtn.style.bottom = fs ? '125px' : '102px';
         });
 
-        // Show button when ED starts, hide when ED ends
+        // Show both buttons when ED is playing, hide when ED ends
         player.addEventListener('timeupdate', () => {
             if (!globalAniSkipData || !globalAniSkipData.outro) return;
             const t = player.currentTime;
             const { start, end } = globalAniSkipData.outro;
             const inEd = t >= start && t < end;
             button.classList.toggle('invisible', !inEd);
-            if (t >= end && document.contains(button)) button.remove();
+            submitBtn.classList.toggle('invisible', !inEd);
+            if (t >= end) {
+                if (document.contains(button)) button.remove();
+                if (document.contains(submitBtn)) submitBtn.remove();
+            }
         });
     }
 
     // Fallback "Skip Outro" button — shown 5 min before end when AniSkip has no outro data.
     // Skips forward 90 s; if that would go past the end, triggers autoplay immediately.
-    function setupFallbackOutroSkipButton(player, messenger) {
+    // Also shows a "Submit Outro" button alongside it so the user can contribute times.
+    function setupFallbackOutroSkipButton(player, messenger, iframeInterface = null) {
         const SKIP_DURATION_S = 90;
         const SHOW_BEFORE_END_S = 300; // 5 minutes
 
@@ -2542,6 +2590,25 @@ const DEFAULT_SETTINGS_LAYOUT = {
     }
     .SkipOutroFallbackBtn:hover { background-color: rgba(80, 50, 0, 0.85); }
     .SkipOutroFallbackBtn.invisible { opacity: 0; pointer-events: none; }
+    .SubmitOutroFallbackBtn {
+      position: fixed;
+      bottom: 120px;
+      right: 5px;
+      padding: 8px 12px;
+      font-size: 13px;
+      font-weight: bold;
+      font-family: sans-serif;
+      color: white;
+      background-color: rgba(0, 0, 0, 0.55);
+      border: 2px solid #f5a623;
+      text-transform: uppercase;
+      cursor: pointer;
+      opacity: 1;
+      transition: background-color 130ms, opacity 200ms;
+      z-index: 9999;
+    }
+    .SubmitOutroFallbackBtn:hover { background-color: rgba(80, 50, 0, 0.85); }
+    .SubmitOutroFallbackBtn.invisible { opacity: 0; pointer-events: none; }
   `);
 
         const button = document.createElement('button');
@@ -2549,7 +2616,6 @@ const DEFAULT_SETTINGS_LAYOUT = {
         button.textContent = userLang === 'de' ? 'Outro überspringen' : 'Skip Outro';
 
         button.addEventListener('click', () => {
-            GM_setValue('aw_user_nav_ts', Date.now());
             const newTime = player.currentTime + SKIP_DURATION_S;
             if (!isFinite(player.duration) || newTime >= player.duration) {
                 console.log('[Autoplay] Fallback outro skip — past end, firing AUTOPLAY_NEXT');
@@ -2561,12 +2627,27 @@ const DEFAULT_SETTINGS_LAYOUT = {
             button.remove();
         });
 
+        // "Submit Outro" button — shown above the skip button so user can contribute times
+        const submitBtn = document.createElement('button');
+        submitBtn.className = 'SubmitOutroFallbackBtn invisible';
+        submitBtn.textContent = userLang === 'de' ? '↑ Outro einreichen' : '↑ Submit Outro';
+        submitBtn.addEventListener('click', () => {
+            if (iframeInterface) {
+                iframeInterface._openSkipTimesDialog(null, iframeInterface.episodeNumber, null, false, 'outro');
+            }
+        });
+
         const insertButton = () => {
             const loadX = document.querySelector('.jw-controlbar');
             const speedFiles = document.querySelector('#my-video');
             const voe = document.querySelector('.jw-controls');
-            if (loadX) loadX.appendChild(button);
-            else if (speedFiles || voe) document.body.appendChild(button);
+            if (loadX) {
+                loadX.appendChild(button);
+                if (iframeInterface) loadX.appendChild(submitBtn);
+            } else if (speedFiles || voe) {
+                document.body.appendChild(button);
+                if (iframeInterface) document.body.appendChild(submitBtn);
+            }
         };
 
         waitForElement('.jw-controlbar, #my-video, .jw-controls', {
@@ -2575,18 +2656,22 @@ const DEFAULT_SETTINGS_LAYOUT = {
         }, insertButton);
 
         document.addEventListener('fullscreenchange', () => {
-            button.style.bottom = document.fullscreenElement ? '80px' : '57px';
+            const fs = document.fullscreenElement;
+            button.style.bottom = fs ? '80px' : '57px';
+            submitBtn.style.bottom = fs ? '125px' : '102px';
         });
 
         player.addEventListener('timeupdate', () => {
-            // If AniSkip has outro data the proper SkipEdBtn handles it — remove this one
+            // If AniSkip has outro data the proper SkipEdBtn handles it — remove both buttons
             if (globalAniSkipData && globalAniSkipData.outro) {
                 button.remove();
+                submitBtn.remove();
                 return;
             }
             const timeLeft = player.duration - player.currentTime;
             const shouldShow = isFinite(timeLeft) && timeLeft > 0 && timeLeft <= SHOW_BEFORE_END_S;
             button.classList.toggle('invisible', !shouldShow);
+            submitBtn.classList.toggle('invisible', !shouldShow);
         });
     }
 
@@ -2714,6 +2799,14 @@ const DEFAULT_SETTINGS_LAYOUT = {
                     timeout: 5000,
                     position: 'right-bottom'
                 });
+                // Save locally so skip works immediately without waiting for API cache refresh
+                const introData = { start: introStart, end: introEnd };
+                AniSkipModule.saveLocalSkipTimes(
+                    iframeInterface.animeSlug, iframeInterface.seasonNumber,
+                    iframeInterface.episodeNumber, introData, undefined
+                );
+                if (!globalAniSkipData) globalAniSkipData = {};
+                globalAniSkipData.intro = introData;
                 button.remove();
             } else {
                 Notiflix.Notify.failure(i18n.submitError + (result.error ? `: ${result.error}` : ''), {
@@ -3271,7 +3364,6 @@ const DEFAULT_SETTINGS_LAYOUT = {
             this.animeSlug = null;
             this.episodeNumber = null;
             this.seasonNumber = null;
-            this.imdbId = null;
             coreSettings[CORE_SETTINGS_MAP.currentLargeSkipSizeS] = (
                 advancedSettings[ADVANCED_SETTINGS_MAP.defaultLargeSkipSizeS]
             );
@@ -3304,18 +3396,6 @@ const DEFAULT_SETTINGS_LAYOUT = {
                             this.animeSlug = packet.data.animeSlug || null;
                             this.episodeNumber = packet.data.episodeNumber || null;
                             this.seasonNumber = packet.data.seasonNumber || null;
-                            this.imdbId = packet.data.imdbId || null;
-
-                            // Fetch IntroDB data for S.to (live-action series)
-                            if (this.topScopeDomainId === 'sto' && this.imdbId && this.episodeNumber && this.seasonNumber) {
-                                this.fetchIntroDBData().then(data => {
-                                    if (data) {
-                                        globalAniSkipData = data;
-                                        const player = document.querySelector('video');
-                                        if (player) addTimelineMarkers(player);
-                                    }
-                                }).catch(err => console.error('[IntroDB] Error:', err));
-                            }
 
                             // Fetch AniSkip data when we receive episode info
                             // Only on aniworld.to - AniSkip is for anime, not series
@@ -3472,9 +3552,25 @@ const DEFAULT_SETTINGS_LAYOUT = {
                     return null;
                 }
 
-                // ── "No data" cache — avoids spamming APIs + notification on every reload ──
+                // ── Check for local override data ──────────────────────────────
+                const localData = AniSkipModule.getLocalSkipTimes(slug, season, episode);
+                const hasLocalData = !!(localData && (localData.intro || localData.outro));
+                if (hasLocalData) {
+                    console.log('[AniSkip] Found local override data:', localData);
+                }
+
+                // Merge local overrides on top of API data (local always wins per type)
+                const applyLocalOverrides = (data) => {
+                    if (!hasLocalData) return data;
+                    const merged = data ? { ...data } : {};
+                    if (localData.intro) merged.intro = localData.intro;
+                    if (localData.outro) merged.outro = localData.outro;
+                    return merged;
+                };
+
+                // ── "No data" cache — skip if we have local data to use ──────────────
                 const noDataKey = `aw_nodata::${slug}::s${season ?? 1}::e${episode}`;
-                if (!ignoreNoDataCache) {
+                if (!ignoreNoDataCache && !hasLocalData) {
                     const noDataEntry = GM_getValue(noDataKey, null);
                     if (noDataEntry) {
                     try {
@@ -3501,18 +3597,29 @@ const DEFAULT_SETTINGS_LAYOUT = {
                     try {
                         const animeSkipResult = await AnimeSkipModule.getSkipTimes(title, episode, epLen, season);
                         if (animeSkipResult?.intro) {
-                            console.log('[AnimeSkip] Direct fallback succeeded:', animeSkipResult);
+                            const merged = applyLocalOverrides(animeSkipResult);
+                            console.log('[AnimeSkip] Direct fallback succeeded:', merged);
                             if (advancedSettings[ADVANCED_SETTINGS_MAP.showAniSkipNotifications]) {
                                 Notiflix.Notify.success('AnimeSkip: ' + (userLang === 'de' ? 'Erkannte Zeiten werden verwendet' : 'Using detected times'), {
                                     timeout: 2000,
                                     position: 'right-bottom',
                                 });
+                                this.showOverrideButton(null, episode);
                             }
-                            globalAniSkipData = animeSkipResult;
-                            return animeSkipResult;
+                            globalAniSkipData = merged;
+                            return merged;
                         }
                     } catch (e) {
                         console.error('[AnimeSkip] Direct fallback error:', e);
+                    }
+                    // No MAL ID, no AnimeSkip data — use local if available
+                    if (hasLocalData) {
+                        console.log('[AniSkip] No MAL ID / API data, using local override data');
+                        globalAniSkipData = localData;
+                        if (advancedSettings[ADVANCED_SETTINGS_MAP.showAniSkipNotifications]) {
+                            this.showOverrideButton(null, episode);
+                        }
+                        return localData;
                     }
                     if (epLen > 0) {
                         GM_setValue(noDataKey, { _cachedAt: Date.now() });
@@ -3545,10 +3652,14 @@ const DEFAULT_SETTINGS_LAYOUT = {
                     ? AniSkipModule.parseSkipTimes(skipTimes, episodeLength)
                     : null;
 
-                if (parsed?.intro) {
-                    console.log('[AniSkip] Successfully fetched skip times:', parsed);
-                    globalAniSkipData = parsed;
-                    return parsed;
+                if (parsed?.intro || parsed?.outro) {
+                    const merged = applyLocalOverrides(parsed);
+                    console.log('[AniSkip] Successfully fetched skip times:', merged);
+                    globalAniSkipData = merged;
+                    if (advancedSettings[ADVANCED_SETTINGS_MAP.showAniSkipNotifications]) {
+                        this.showOverrideButton(malId, episode);
+                    }
+                    return merged;
                 }
 
                 // ── Fallback 1: anime-skip.com ──────────────────────────────
@@ -3556,18 +3667,30 @@ const DEFAULT_SETTINGS_LAYOUT = {
                 try {
                     const animeSkipResult = await AnimeSkipModule.getSkipTimes(title, episode, episodeLength, season);
                     if (animeSkipResult?.intro) {
-                        console.log('[AnimeSkip] Fallback succeeded:', animeSkipResult);
+                        const merged = applyLocalOverrides(animeSkipResult);
+                        console.log('[AnimeSkip] Fallback succeeded:', merged);
                         if (advancedSettings[ADVANCED_SETTINGS_MAP.showAniSkipNotifications]) {
                             Notiflix.Notify.success('AnimeSkip: ' + (userLang === 'de' ? 'Erkannte Zeiten werden verwendet' : 'Using detected times'), {
                                 timeout: 2000,
                                 position: 'right-bottom',
                             });
+                            this.showOverrideButton(malId, episode);
                         }
-                        globalAniSkipData = animeSkipResult;
-                        return animeSkipResult;
+                        globalAniSkipData = merged;
+                        return merged;
                     }
                 } catch (fallbackErr) {
                     console.error('[AnimeSkip] Fallback error:', fallbackErr);
+                }
+
+                // ── All API sources failed — check local data before giving up ──
+                if (hasLocalData) {
+                    console.log('[AniSkip] All API sources exhausted, using local override data:', localData);
+                    globalAniSkipData = localData;
+                    if (advancedSettings[ADVANCED_SETTINGS_MAP.showAniSkipNotifications]) {
+                        this.showOverrideButton(malId, episode);
+                    }
+                    return localData;
                 }
 
                 // ── All sources failed — cache result + show submit notification ──
@@ -3587,67 +3710,249 @@ const DEFAULT_SETTINGS_LAYOUT = {
             }
         }
 
-        async fetchIntroDBData() {
-            const { imdbId, episodeNumber: episode, seasonNumber: season, animeSlug: slug } = this;
-
-            const noDataKey = `aw_introdb_nodata::${imdbId}::s${season}::e${episode}`;
-            const noDataEntry = GM_getValue(noDataKey, null);
-            if (noDataEntry?._cachedAt && Date.now() - noDataEntry._cachedAt < 2 * 60 * 60 * 1000) {
-                console.log('[IntroDB] "No data" cached, skipping fetch');
-                return null;
+        // Opens the submit/override dialog for a specific type ('intro' or 'outro').
+        // isOverride=true → pre-fills with current globalAniSkipData and shows "Override" wording.
+        _openSkipTimesDialog(malId, episode, button, isOverride = false, type = 'intro') {
+            let player = this.player || document.querySelector('video');
+            if (!player) {
+                Notiflix.Notify.failure('Player not ready', { timeout: 3000, position: 'right-bottom' });
+                return;
             }
 
-            console.log('[IntroDB] Fetching for:', { imdbId, season, episode });
+            const isIntro = type === 'intro';
 
-            const result = await IntroDBModule.getSegments(imdbId, season, episode);
-
-            if (result?.intro || result?.outro) {
-                console.log('[IntroDB] Data found:', result);
-                if (advancedSettings[ADVANCED_SETTINGS_MAP.showAniSkipNotifications]) {
-                    Notiflix.Notify.success('IntroDB: ' + (userLang === 'de' ? 'Erkannte Zeiten werden verwendet' : 'Using detected times'), {
-                        timeout: 2000,
-                        position: 'right-bottom',
-                    });
+            const timeToSeconds = (str) => {
+                str = String(str).trim();
+                if (str.includes(':')) {
+                    const [m, s] = str.split(':');
+                    return (parseInt(m) || 0) * 60 + (parseInt(s) || 0);
                 }
-                return result;
+                return parseFloat(str) || 0;
+            };
+            const formatTime = (sec) => {
+                const m = Math.floor(sec / 60), s = Math.floor(sec % 60);
+                return `${m}:${s.toString().padStart(2, '0')}`;
+            };
+
+            // Pre-fill: override mode uses existing data, submit mode uses session values
+            const existing = isOverride && (isIntro ? globalAniSkipData?.intro : globalAniSkipData?.outro);
+            const sessionStart = isIntro ? submitDialogValues.introStart : submitDialogValues.outroStart;
+            const sessionEnd   = isIntro ? submitDialogValues.introEnd   : submitDialogValues.outroEnd;
+            const initStart = existing ? formatTime(existing.start) : (sessionStart || '0:00');
+            const initEnd   = existing ? formatTime(existing.end)   : (sessionEnd   || '0:00');
+
+            const themeVars = getCurrentThemeVars();
+            const { bgPrimary, bgSecondary, bgTertiary, accentPrimary, accentSecondary,
+                    textPrimary, textSecondary, borderColor, borderRadius, fontFamily } = themeVars;
+            const typeColor = isIntro ? accentPrimary : accentSecondary;
+
+            const overlay = document.createElement('div');
+            overlay.id = 'aw-submit-overlay';
+            overlay.style.cssText = `position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);z-index:99998;`;
+
+            const dialog = document.createElement('div');
+            dialog.id = 'aw-submit-dialog';
+            dialog.style.cssText = `
+                position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
+                width:340px;z-index:99999;background:${bgPrimary};border-radius:${borderRadius};
+                overflow:hidden;box-shadow:0 25px 50px rgba(0,0,0,0.5);font-family:${fontFamily};color:${textPrimary};
+            `;
+
+            if (!document.getElementById('aw-submit-shimmer-style')) {
+                const s = document.createElement('style');
+                s.id = 'aw-submit-shimmer-style';
+                s.textContent = `@keyframes aw-submit-shimmer{0%,100%{background-position:0% 50%}50%{background-position:100% 50%}}`;
+                document.head.appendChild(s);
             }
 
-            console.log('[IntroDB] No data found for this episode');
-            GM_setValue(noDataKey, { _cachedAt: Date.now() });
-            return null;
+            const inputStyle = `flex:1;padding:10px 12px;background:${bgSecondary};border:1px solid ${borderColor};border-radius:8px;color:${textPrimary};font-family:inherit;font-size:13px;`;
+            const setStyle   = `padding:10px 13px;background:${bgTertiary};border:1px solid ${borderColor};border-radius:8px;color:${textSecondary};font-family:inherit;font-size:11px;font-weight:500;cursor:pointer;white-space:nowrap;`;
+
+            const typeLabelDE = isIntro ? 'Intro' : 'Outro';
+            const typeLabelEN = isIntro ? 'Intro' : 'Outro';
+
+            const titleText = isOverride
+                ? (userLang === 'de' ? `${typeLabelDE} Zeiten überschreiben` : `Override ${typeLabelEN} Times`)
+                : (userLang === 'de' ? `${typeLabelDE} Zeiten einreichen`    : `Submit ${typeLabelEN} Times`);
+            const subtitleText = isOverride
+                ? (userLang === 'de' ? 'Lokal gespeicherte Zeiten haben Vorrang' : 'Locally saved times take priority')
+                : (userLang === 'de' ? 'Der Community helfen!' : 'Help the community!');
+
+            dialog.innerHTML = `
+                <div style="background:${bgSecondary};padding:14px 16px;border-bottom:1px solid ${borderColor};display:flex;align-items:center;gap:12px;position:relative;">
+                    <div style="position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,${typeColor},${accentSecondary},${typeColor});background-size:200% 100%;animation:aw-submit-shimmer 3s ease-in-out infinite;"></div>
+                    <div style="width:40px;height:40px;background:linear-gradient(135deg,${typeColor},${accentSecondary});border-radius:10px;display:flex;align-items:center;justify-content:center;color:white;font-size:18px;flex-shrink:0;">
+                        ${isOverride ? '✎' : '↑'}
+                    </div>
+                    <div style="min-width:0;">
+                        <h3 style="font-size:15px;font-weight:600;margin:0 0 2px 0;">${titleText}</h3>
+                        <p style="font-size:11px;color:${textSecondary};margin:0;">${subtitleText}</p>
+                    </div>
+                    <button id="aw-submit-close" style="margin-left:auto;width:26px;height:26px;border:none;background:${bgTertiary};border-radius:6px;color:${textSecondary};cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">×</button>
+                </div>
+                <div style="padding:16px;">
+                    <div style="margin-bottom:12px;">
+                        <label style="display:block;font-size:11px;color:${textSecondary};margin-bottom:6px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;">
+                            ${userLang === 'de' ? `${typeLabelDE} Start` : `${typeLabelEN} Start`}
+                        </label>
+                        <div style="display:flex;gap:6px;">
+                            <input type="text" id="aw-time-start" value="${initStart}" style="${inputStyle}">
+                            <button id="aw-set-start" style="${setStyle}">${userLang === 'de' ? 'Jetzt' : 'Now'}</button>
+                        </div>
+                    </div>
+                    <div style="margin-bottom:18px;">
+                        <label style="display:block;font-size:11px;color:${textSecondary};margin-bottom:6px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;">
+                            ${userLang === 'de' ? `${typeLabelDE} Ende` : `${typeLabelEN} End`}
+                        </label>
+                        <div style="display:flex;gap:6px;">
+                            <input type="text" id="aw-time-end" value="${initEnd}" style="${inputStyle}">
+                            <button id="aw-set-end" style="${setStyle}">${userLang === 'de' ? 'Jetzt' : 'Now'}</button>
+                            <button id="aw-add-end" style="${setStyle}" title="+1:30 min">+1:30</button>
+                        </div>
+                    </div>
+                    <div style="display:flex;gap:8px;">
+                        <button id="aw-submit-cancel" style="padding:10px 14px;background:${bgTertiary};border:none;border-radius:8px;color:${textSecondary};font-family:inherit;font-size:12px;font-weight:500;cursor:pointer;">
+                            ${userLang === 'de' ? 'Abbrechen' : 'Cancel'}
+                        </button>
+                        <button id="aw-save-local" style="flex:1;padding:10px;background:rgba(34,197,94,0.15);border:1px solid rgba(34,197,94,0.4);border-radius:8px;color:rgb(34,197,94);font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;">
+                            ${userLang === 'de' ? '💾 Lokal speichern' : '💾 Save Locally'}
+                        </button>
+                        <button id="aw-submit-confirm" style="flex:1;padding:10px;background:linear-gradient(135deg,${typeColor},${accentSecondary});border:none;border-radius:8px;color:white;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;">
+                            ${userLang === 'de' ? '↑ API einreichen' : '↑ Submit to API'}
+                        </button>
+                    </div>
+                </div>
+            `;
+
+            document.body.appendChild(overlay);
+            document.body.appendChild(dialog);
+
+            dialog.querySelectorAll('input').forEach(input => {
+                ['keydown', 'keyup', 'keypress'].forEach(ev => input.addEventListener(ev, e => e.stopPropagation()));
+            });
+
+            const closeDialog = () => {
+                const val = { start: dialog.querySelector('#aw-time-start').value, end: dialog.querySelector('#aw-time-end').value };
+                if (isIntro) { submitDialogValues.introStart = val.start; submitDialogValues.introEnd = val.end; }
+                else         { submitDialogValues.outroStart = val.start; submitDialogValues.outroEnd = val.end; }
+                overlay.remove();
+                dialog.remove();
+            };
+
+            const getNow = () => formatTime(Math.floor(player.currentTime));
+            dialog.querySelector('#aw-set-start').onclick = () => { dialog.querySelector('#aw-time-start').value = getNow(); };
+            dialog.querySelector('#aw-set-end').onclick   = () => { dialog.querySelector('#aw-time-end').value   = getNow(); };
+
+            dialog.querySelector('#aw-add-end').onclick = () => {
+                const startSecs = timeToSeconds(dialog.querySelector('#aw-time-start').value);
+                dialog.querySelector('#aw-time-end').value = formatTime(startSecs + 90);
+            };
+
+            overlay.addEventListener('click', closeDialog);
+            dialog.querySelector('#aw-submit-close').addEventListener('click', closeDialog);
+            dialog.querySelector('#aw-submit-cancel').addEventListener('click', closeDialog);
+
+            // Validate and return { start, end } or null
+            const readFields = () => {
+                const start = timeToSeconds(dialog.querySelector('#aw-time-start').value);
+                const end   = timeToSeconds(dialog.querySelector('#aw-time-end').value);
+                if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) {
+                    Notiflix.Notify.failure(userLang === 'de'
+                        ? `Ungültige ${typeLabelDE}-Zeiten. Ende muss nach dem Start liegen.`
+                        : `Invalid ${typeLabelEN} times. End must be greater than start.`,
+                        { timeout: 3000, position: 'right-bottom' });
+                    return null;
+                }
+                return { start, end };
+            };
+
+            // ── Save Locally ──────────────────────────────────────────────────────
+            dialog.querySelector('#aw-save-local').addEventListener('click', () => {
+                const times = readFields();
+                if (!times) return;
+
+                const introArg = isIntro  ? times     : undefined;
+                const outroArg = !isIntro ? times     : undefined;
+                AniSkipModule.saveLocalSkipTimes(this.animeSlug, this.seasonNumber, episode, introArg, outroArg);
+
+                if (!globalAniSkipData) globalAniSkipData = {};
+                if (isIntro)  globalAniSkipData.intro = times;
+                else          globalAniSkipData.outro = times;
+
+                closeDialog();
+                if (button) button.remove();
+                if (isIntro) submitDialogValues.introStart = submitDialogValues.introEnd = null;
+                else         submitDialogValues.outroStart = submitDialogValues.outroEnd = null;
+
+                Notiflix.Notify.success(userLang === 'de'
+                    ? 'Lokal gespeichert! Zeiten werden sofort verwendet.'
+                    : 'Saved locally! Times will be used immediately.', { timeout: 4000, position: 'right-bottom' });
+
+                const playerEl = document.querySelector('video');
+                if (playerEl) addTimelineMarkers(playerEl);
+            });
+
+            // ── Submit to API ─────────────────────────────────────────────────────
+            dialog.querySelector('#aw-submit-confirm').addEventListener('click', async () => {
+                const times = readFields();
+                if (!times) return;
+                const episodeLength = player.duration ? Math.floor(player.duration) : 0;
+
+                let resolvedMalId = malId;
+                if (!resolvedMalId) {
+                    resolvedMalId = await AniSkipModule.getMalId(this.animeTitle, this.animeSlug, this.seasonNumber);
+                }
+                if (!resolvedMalId) {
+                    Notiflix.Notify.failure(
+                        userLang === 'de'
+                            ? 'MAL-ID nicht gefunden. Bitte "Lokal speichern" verwenden.'
+                            : 'Could not find MAL ID. Use "Save Locally" instead.',
+                        { timeout: 4000, position: 'right-bottom' });
+                    return;
+                }
+
+                closeDialog();
+                Notiflix.Notify.info(
+                    userLang === 'de' ? 'Wird zu AniSkip hochgeladen...' : 'Submitting to AniSkip...',
+                    { timeout: 3000, position: 'right-bottom' });
+
+                const result = isIntro
+                    ? await AniSkipModule.submitSkipTimes(resolvedMalId, episode, episodeLength, times.start, times.end)
+                    : await AniSkipModule.submitOutroTimes(resolvedMalId, episode, episodeLength, times.start, times.end);
+
+                if (result.success) {
+                    const introArg = isIntro  ? times : undefined;
+                    const outroArg = !isIntro ? times : undefined;
+                    AniSkipModule.saveLocalSkipTimes(this.animeSlug, this.seasonNumber, episode, introArg, outroArg);
+                    if (!globalAniSkipData) globalAniSkipData = {};
+                    if (isIntro)  globalAniSkipData.intro = times;
+                    else          globalAniSkipData.outro = times;
+
+                    if (button) button.remove();
+                    if (isIntro) submitDialogValues.introStart = submitDialogValues.introEnd = null;
+                    else         submitDialogValues.outroStart = submitDialogValues.outroEnd = null;
+
+                    Notiflix.Notify.success(userLang === 'de'
+                        ? 'Erfolgreich eingereicht und lokal gespeichert!'
+                        : 'Successfully submitted and saved locally!', { timeout: 5000, position: 'right-bottom' });
+                    const playerEl = document.querySelector('video');
+                    if (playerEl) addTimelineMarkers(playerEl);
+                } else {
+                    Notiflix.Notify.failure(
+                        (userLang === 'de' ? 'Fehler beim Einreichen.' : 'Failed to submit.') + (result.error ? `: ${result.error}` : ''),
+                        { timeout: 5000, position: 'right-bottom' });
+                }
+            });
         }
 
         showSubmitNotification(malId, episode) {
             console.log('[AniSkip] Showing submit button');
 
-            // Helper to convert MM:SS or SS to seconds
-            const timeToSeconds = (timeStr) => {
-                timeStr = String(timeStr).trim();
-                if (timeStr.includes(':')) {
-                    const parts = timeStr.split(':');
-                    if (parts.length === 2) {
-                        const minutes = parseInt(parts[0]) || 0;
-                        const seconds = parseInt(parts[1]) || 0;
-                        return minutes * 60 + seconds;
-                    }
-                }
-                return parseFloat(timeStr) || 0;
-            };
-
-            // Helper to format seconds as MM:SS
-            const secondsToTime = (seconds) => {
-                const mins = Math.floor(seconds / 60);
-                const secs = Math.floor(seconds % 60);
-                return `${mins}:${secs.toString().padStart(2, '0')}`;
-            };
-
-            // Get theme colors for the button
             const themeVars = getCurrentThemeVars();
             const btnBg1 = themeVars.submitBtnBg1 || themeVars.accentPrimary || 'rgba(255,51,102,1)';
             const btnBg2 = themeVars.submitBtnBg2 || themeVars.accentSecondary || 'rgba(124,58,237,1)';
             const btnText = themeVars.submitBtnText || 'rgba(255,255,255,1)';
 
-            // Create button element
             const button = document.createElement('a');
             button.id = 'AniSkipSubmitButton';
             button.className = 'notiflix-report-button';
@@ -3670,9 +3975,8 @@ const DEFAULT_SETTINGS_LAYOUT = {
                 border: 2px solid rgba(255,255,255,0.2);
                 opacity: 1;
             `;
-            button.textContent = 'Submit Intro';
+            button.textContent = userLang === 'de' ? 'Intro einreichen' : 'Submit Intro';
 
-            // Auto-hide functionality
             let hideTimeout;
             let isMouseOverButton = false;
 
@@ -3685,9 +3989,8 @@ const DEFAULT_SETTINGS_LAYOUT = {
                         button.style.opacity = '0';
                         button.style.pointerEvents = 'none';
                     }
-                }, 3000); // Hide after 3 seconds of no mouse movement
+                }, 3000);
             };
-
             const hideButton = () => {
                 if (!isMouseOverButton) {
                     button.style.opacity = '0';
@@ -3695,46 +3998,31 @@ const DEFAULT_SETTINGS_LAYOUT = {
                 }
             };
 
-            // Show button on mouse movement
             document.addEventListener('mousemove', showButton);
-
-            // Keep button visible when hovering over it
             button.addEventListener('mouseenter', () => {
                 isMouseOverButton = true;
                 button.style.opacity = '1';
                 button.style.pointerEvents = 'auto';
                 clearTimeout(hideTimeout);
             });
-
             button.addEventListener('mouseleave', () => {
                 isMouseOverButton = false;
                 hideTimeout = setTimeout(hideButton, 2000);
             });
-
-            // Initial hide after 3 seconds
             hideTimeout = setTimeout(hideButton, 3000);
 
-            // Hide the Skip Intro button when Submit button is visible
             const hideSkipIntroButton = () => {
                 const skipIntroBtn = document.querySelector('.SkipIntroBtn');
-                if (skipIntroBtn) {
-                    skipIntroBtn.style.display = 'none';
-                    console.log('[AniSkip] Skip Intro button hidden');
-                }
+                if (skipIntroBtn) skipIntroBtn.style.display = 'none';
             };
-
-            // Try to hide it immediately and keep checking
             hideSkipIntroButton();
             const checkInterval = setInterval(hideSkipIntroButton, 500);
 
-            // Clean up when submit button is removed
             const originalRemove = button.remove.bind(button);
             button.remove = function() {
                 clearInterval(checkInterval);
                 const skipIntroBtn = document.querySelector('.SkipIntroBtn');
-                if (skipIntroBtn) {
-                    skipIntroBtn.style.display = '';
-                }
+                if (skipIntroBtn) skipIntroBtn.style.display = '';
                 originalRemove();
             };
 
@@ -3743,371 +4031,50 @@ const DEFAULT_SETTINGS_LAYOUT = {
                 this.style.boxShadow = `0 6px 16px ${btnBg1}80`;
                 this.style.background = `linear-gradient(135deg, ${btnBg2} 0%, ${btnBg1} 100%)`;
             };
-
             button.onmouseleave = function() {
                 this.style.transform = '';
                 this.style.boxShadow = '0 2px 8px rgba(0,0,0,0.3)';
                 this.style.background = `linear-gradient(135deg, ${btnBg1} 0%, ${btnBg2} 100%)`;
             };
 
-            button.onclick = async (e) => {
+            button.onclick = (e) => {
                 e.preventDefault();
-                console.log('[AniSkip] Submit button clicked');
-
-                // Wait for player to be ready
-                let player = this.player;
-                if (!player) {
-                    console.log('[AniSkip] Player not in this.player, searching for it...');
-                    const videoEl = document.querySelector('video');
-                    if (videoEl) {
-                        player = videoEl;
-                        console.log('[AniSkip] Found video element');
-                    }
-                }
-
-                if (!player) {
-                    Notiflix.Notify.failure('Player not ready', {
-                        timeout: 3000,
-                        position: 'right-bottom'
-                    });
-                    return;
-                }
-
-                const currentTime = Math.floor(player.currentTime || 0);
-
-                // Helper to format seconds as MM:SS
-                const formatTime = (seconds) => {
-                    const mins = Math.floor(seconds / 60);
-                    const secs = Math.floor(seconds % 60);
-                    return `${mins}:${secs.toString().padStart(2, '0')}`;
-                };
-
-                // Use saved values if available, otherwise default to 0:00
-                const initialStartValue = submitDialogValues.start || '0:00';
-                const initialEndValue = submitDialogValues.end || '0:00';
-
-                console.log('[AniSkip] Creating Submit UI...');
-
-                // Get current theme variables using the shared theme system
-                const themeVars = getCurrentThemeVars();
-
-                // Create overlay
-                const overlay = document.createElement('div');
-                overlay.id = 'aw-submit-overlay';
-                overlay.style.cssText = `
-                    position: fixed;
-                    top: 0;
-                    left: 0;
-                    right: 0;
-                    bottom: 0;
-                    background: rgba(0, 0, 0, 0.6);
-                    backdrop-filter: blur(4px);
-                    z-index: 99998;
-                `;
-
-                // Create dialog with popup-style design
-                const dialog = document.createElement('div');
-                dialog.id = 'aw-submit-dialog';
-
-                // Use theme variables directly
-                const bgPrimary = themeVars.bgPrimary;
-                const bgSecondary = themeVars.bgSecondary;
-                const bgTertiary = themeVars.bgTertiary;
-                const accentPrimary = themeVars.accentPrimary;
-                const accentSecondary = themeVars.accentSecondary;
-                const textPrimary = themeVars.textPrimary;
-                const textSecondary = themeVars.textSecondary;
-                const borderColor = themeVars.borderColor;
-                const borderRadius = themeVars.borderRadius;
-                const fontFamily = themeVars.fontFamily;
-
-                dialog.style.cssText = `
-                    position: fixed;
-                    top: 50%;
-                    left: 50%;
-                    transform: translate(-50%, -50%);
-                    width: 340px;
-                    z-index: 99999;
-                    background: ${bgPrimary};
-                    border-radius: ${borderRadius};
-                    overflow: hidden;
-                    box-shadow: 0 25px 50px rgba(0, 0, 0, 0.5);
-                    font-family: ${fontFamily};
-                    color: ${textPrimary};
-                `;
-
-                // Inject shimmer animation keyframes if not already present
-                if (!document.getElementById('aw-submit-shimmer-style')) {
-                    const shimmerStyle = document.createElement('style');
-                    shimmerStyle.id = 'aw-submit-shimmer-style';
-                    shimmerStyle.textContent = `
-                        @keyframes aw-submit-shimmer {
-                            0%, 100% { background-position: 0% 50%; }
-                            50% { background-position: 100% 50%; }
-                        }
-                    `;
-                    document.head.appendChild(shimmerStyle);
-                }
-
-                dialog.innerHTML = `
-                    <div style="
-                        background: ${bgSecondary};
-                        padding: 16px 18px;
-                        border-bottom: 1px solid ${borderColor};
-                        display: flex;
-                        align-items: center;
-                        gap: 14px;
-                        position: relative;
-                    ">
-                        <div style="
-                            position: absolute;
-                            top: 0;
-                            left: 0;
-                            right: 0;
-                            height: 2px;
-                            background: linear-gradient(90deg, ${accentPrimary}, ${accentSecondary}, ${accentPrimary});
-                            background-size: 200% 100%;
-                            animation: aw-submit-shimmer 3s ease-in-out infinite;
-                        "></div>
-                        <div style="
-                            width: 44px;
-                            height: 44px;
-                            background: linear-gradient(135deg, ${accentPrimary}, ${accentSecondary});
-                            border-radius: 12px;
-                            display: flex;
-                            align-items: center;
-                            justify-content: center;
-                            font-size: 20px;
-                            color: white;
-                        "><i class="fas fa-upload" style="font-size: 18px;"></i></div>
-                        <div>
-                            <h3 style="font-size: 16px; font-weight: 600; margin: 0 0 2px 0;">Submit Intro Times</h3>
-                            <p style="font-size: 12px; color: ${textSecondary}; margin: 0;">Help the community!</p>
-                        </div>
-                        <button id="aw-submit-close" style="
-                            margin-left: auto;
-                            width: 28px;
-                            height: 28px;
-                            border: none;
-                            background: ${bgTertiary};
-                            border-radius: 6px;
-                            color: ${textSecondary};
-                            cursor: pointer;
-                            display: flex;
-                            align-items: center;
-                            justify-content: center;
-                            font-size: 14px;
-                        ">×</button>
-                    </div>
-
-                    <div style="padding: 20px 18px;">
-                        <div style="margin-bottom: 16px;">
-                            <label style="display: block; font-size: 12px; color: ${textSecondary}; margin-bottom: 8px;">Intro Start (seconds)</label>
-                            <div style="display: flex; gap: 8px;">
-                                <input type="text" id="aw-submit-start" value="${initialStartValue}" style="
-                                    flex: 1;
-                                    padding: 12px 14px;
-                                    background: ${bgSecondary};
-                                    border: 1px solid ${borderColor};
-                                    border-radius: 8px;
-                                    color: ${textPrimary};
-                                    font-family: inherit;
-                                    font-size: 14px;
-                                ">
-                                <button id="aw-set-start" style="
-                                    padding: 12px 16px;
-                                    background: ${bgTertiary};
-                                    border: 1px solid ${borderColor};
-                                    border-radius: 8px;
-                                    color: ${textSecondary};
-                                    font-family: inherit;
-                                    font-size: 12px;
-                                    font-weight: 500;
-                                    cursor: pointer;
-                                ">Set</button>
-                            </div>
-                        </div>
-                        <div style="margin-bottom: 20px;">
-                            <label style="display: block; font-size: 12px; color: ${textSecondary}; margin-bottom: 8px;">Intro End (seconds)</label>
-                            <div style="display: flex; gap: 8px;">
-                                <input type="text" id="aw-submit-end" value="${initialEndValue}" style="
-                                    flex: 1;
-                                    padding: 12px 14px;
-                                    background: ${bgSecondary};
-                                    border: 1px solid ${borderColor};
-                                    border-radius: 8px;
-                                    color: ${textPrimary};
-                                    font-family: inherit;
-                                    font-size: 14px;
-                                ">
-                                <button id="aw-set-end" style="
-                                    padding: 12px 16px;
-                                    background: ${bgTertiary};
-                                    border: 1px solid ${borderColor};
-                                    border-radius: 8px;
-                                    color: ${textSecondary};
-                                    font-family: inherit;
-                                    font-size: 12px;
-                                    font-weight: 500;
-                                    cursor: pointer;
-                                ">Set</button>
-                            </div>
-                        </div>
-
-                        <div style="display: flex; gap: 10px;">
-                            <button id="aw-submit-cancel" style="
-                                flex: 1;
-                                padding: 12px;
-                                background: ${bgTertiary};
-                                border: none;
-                                border-radius: 8px;
-                                color: ${textSecondary};
-                                font-family: inherit;
-                                font-size: 13px;
-                                font-weight: 500;
-                                cursor: pointer;
-                            ">Cancel</button>
-                            <button id="aw-submit-confirm" style="
-                                flex: 1;
-                                padding: 12px;
-                                background: linear-gradient(135deg, ${accentPrimary}, ${accentSecondary});
-                                border: none;
-                                border-radius: 8px;
-                                color: white;
-                                font-family: inherit;
-                                font-size: 13px;
-                                font-weight: 600;
-                                cursor: pointer;
-                            ">Submit</button>
-                        </div>
-                    </div>
-                `;
-
-                document.body.appendChild(overlay);
-                document.body.appendChild(dialog);
-
-                // Stop keyboard events from leaking
-                dialog.querySelectorAll('input').forEach(input => {
-                    ['keydown', 'keyup', 'keypress'].forEach(event => {
-                        input.addEventListener(event, e => e.stopPropagation());
-                    });
-                });
-
-                // Close handlers - save values for this session
-                const closeDialog = () => {
-                    // Save current input values for next time (this session only)
-                    submitDialogValues.start = dialog.querySelector('#aw-submit-start').value;
-                    submitDialogValues.end = dialog.querySelector('#aw-submit-end').value;
-
-                    overlay.remove();
-                    dialog.remove();
-                };
-
-                // Set button handlers - set current play time
-                dialog.querySelector('#aw-set-start').addEventListener('click', () => {
-                    const currentTime = Math.floor(player.currentTime);
-                    dialog.querySelector('#aw-submit-start').value = formatTime(currentTime);
-                });
-
-                dialog.querySelector('#aw-set-end').addEventListener('click', () => {
-                    const currentTime = Math.floor(player.currentTime);
-                    dialog.querySelector('#aw-submit-end').value = formatTime(currentTime);
-                });
-
-                overlay.addEventListener('click', closeDialog);
-                dialog.querySelector('#aw-submit-close').addEventListener('click', closeDialog);
-                dialog.querySelector('#aw-submit-cancel').addEventListener('click', closeDialog);
-
-                // Submit handler
-                dialog.querySelector('#aw-submit-confirm').addEventListener('click', async () => {
-                    const startInput = dialog.querySelector('#aw-submit-start').value;
-                    const endInput = dialog.querySelector('#aw-submit-end').value;
-
-                    const introStart = timeToSeconds(startInput);
-                    const introEnd = timeToSeconds(endInput);
-
-                    console.log('[AniSkip] Intro start:', startInput, '→', introStart, 'seconds');
-                    console.log('[AniSkip] Intro end:', endInput, '→', introEnd, 'seconds');
-
-                    // Validate
-                    if (!Number.isFinite(introStart) || !Number.isFinite(introEnd) || introEnd <= introStart) {
-                        Notiflix.Notify.failure('Invalid times. End must be greater than start.', {
-                            timeout: 3000,
-                            position: 'right-bottom'
-                        });
-                        return;
-                    }
-
-                    const episodeLength = player.duration ? Math.floor(player.duration) : 0;
-
-                    console.log('[AniSkip] Submitting:', {
-                        malId,
-                        episode,
-                        episodeLength,
-                        introStart,
-                        introEnd
-                    });
-
-                    // Close dialog
-                    closeDialog();
-
-                    // Submit
-                    Notiflix.Notify.info('Submitting to AniSkip...', {
-                        timeout: 3000,
-                        position: 'right-bottom'
-                    });
-
-                    const result = await AniSkipModule.submitSkipTimes(
-                        malId,
-                        episode,
-                        episodeLength,
-                        introStart,
-                        introEnd
-                    );
-
-                    if (result.success) {
-                        Notiflix.Notify.success('Successfully submitted! Thank you for contributing!', {
-                            timeout: 5000,
-                            position: 'right-bottom'
-                        });
-                        // Clear session dialog values after successful submission
-                        submitDialogValues = { start: null, end: null };
-                        button.remove();
-                    } else {
-                        Notiflix.Notify.failure('Failed to submit. Please try again.' + (result.error ? `: ${result.error}` : ''), {
-                            timeout: 5000,
-                            position: 'right-bottom'
-                        });
-                    }
-                });
+                this._openSkipTimesDialog(malId, episode, button, false, 'intro');
             };
 
-            // Insert button into page
             const insertButton = () => {
-                // Remove any existing button first
                 const existing = document.getElementById('AniSkipSubmitButton');
                 if (existing) existing.remove();
-
                 document.body.appendChild(button);
                 console.log('[AniSkip] Submit button inserted into DOM');
             };
 
-            // Wait for page to be ready
             if (document.body) {
                 insertButton();
             } else {
                 document.addEventListener('DOMContentLoaded', insertButton);
             }
 
-            // Adjust position on fullscreen
             document.addEventListener('fullscreenchange', () => {
-                const isFullscreen = !!document.fullscreenElement;
-                if (isFullscreen) {
-                    button.style.bottom = '88px';
-                } else {
-                    button.style.bottom = '65px';
-                }
+                button.style.bottom = document.fullscreenElement ? '88px' : '65px';
             });
+        }
+
+        showOverrideButton(malId, episode) {
+            // Remove any previous cross-frame listener
+            if (this._skipDialogListenerId != null) {
+                GM_removeValueChangeListener(this._skipDialogListenerId);
+            }
+            // Signal availability to the top-frame message handler via shared storage
+            GM_setValue('_aniSkipAvailable', 1);
+            // Listen for the open-dialog trigger set by the top-frame message handler
+            this._skipDialogListenerId = GM_addValueChangeListener(
+                'aw_open_skip_dialog',
+                (_key, _old, newVal) => {
+                    if (newVal) this._openSkipTimesDialog(malId, episode, null, true, newVal.type || 'intro');
+                }
+            );
+            console.log('[AniSkip] Zeiten ändern available in popup (malId:', malId, 'ep:', episode, ')');
         }
 
         async init(player) {
@@ -5833,7 +5800,7 @@ const DEFAULT_SETTINGS_LAYOUT = {
                             const player = document.querySelector('video');
                             if (player) {
                                 setupSkipIntroButton(player);
-                                setupSkipEdButton(player);
+                                setupSkipEdButton(player, this);
                                 addTimelineMarkers(player);
                             }
                         } else {
@@ -6290,15 +6257,6 @@ const DEFAULT_SETTINGS_LAYOUT = {
             }
             GM_deleteValue('aw_suppress_autoplay_once'); // clean up stale entries
 
-            // Check if autoplay was triggered by a manual user click (Skip Outro / Skip ED).
-            // In that case skip the forced-mute fallback — the user already interacted.
-            const userNavTs = GM_getValue('aw_user_nav_ts', null);
-            const wasUserInitiated = typeof userNavTs === 'number' && (Date.now() - userNavTs) < 30000;
-            if (wasUserInitiated) {
-                GM_deleteValue('aw_user_nav_ts');
-                console.log('[Autoplay] User-initiated nav detected — skipping muted-autoplay fallback');
-            }
-
             const playTooSlowErr = 'play() was taking too long';
             let muteWasApplied = false;
             // If play fails it tries to fix it but throws the problem error anyway
@@ -6319,8 +6277,7 @@ const DEFAULT_SETTINGS_LAYOUT = {
                             throw e;
                         }
 
-                        // Skip muted fallback when the user explicitly triggered the navigation
-                        if (!wasUserInitiated && mainSettings[MAIN_SETTINGS_MAP.shouldAutoplayMuted] && !muteWasApplied) {
+                        if (mainSettings[MAIN_SETTINGS_MAP.shouldAutoplayMuted] && !muteWasApplied) {
                             player.muted = true;
                             muteWasApplied = true;
 
@@ -6490,18 +6447,10 @@ const DEFAULT_SETTINGS_LAYOUT = {
                 if (outroHasBeenReached || !autoplayOn) return;
 
                 const timeLeft = player.duration - player.currentTime;
-                const hasOutroData = globalAniSkipData && globalAniSkipData.outro;
 
-                // Without outro data we must not skip early — wait for the actual video end (~2 s).
-                // With outro data the auto-skip already moved the player near the end, so the
-                // configured threshold is safe to use.
-                const effectiveThreshold = hasOutroData
-                    ? coreSettings[CORE_SETTINGS_MAP.currentOutroSkipThresholdS]
-                    : 2;
-
-                if (timeLeft <= effectiveThreshold) {
+                if (timeLeft <= coreSettings[CORE_SETTINGS_MAP.currentOutroSkipThresholdS]) {
                     outroHasBeenReached = true;
-                    console.log(`[Autoplay] Threshold reached (${timeLeft.toFixed(1)}s left, hasOutroData: ${!!hasOutroData}) — firing AUTOPLAY_NEXT`);
+                    console.log(`[Autoplay] Threshold reached (${timeLeft.toFixed(1)}s left) — firing AUTOPLAY_NEXT`);
 
                     // Remember PiP state so the next episode can restore it
                     if (document.pictureInPictureElement) {
@@ -6700,8 +6649,8 @@ const DEFAULT_SETTINGS_LAYOUT = {
             this.setupHotkeys(player);
             if (advancedSettings[ADVANCED_SETTINGS_MAP.showSkipIntroButton]) {
                 setupSkipIntroButton(player);
-                setupSkipEdButton(player);
-                setupFallbackOutroSkipButton(player, this.messenger);
+                setupSkipEdButton(player, this);
+                setupFallbackOutroSkipButton(player, this.messenger, this);
             }
 
             addTimelineMarkers(player);
@@ -7033,8 +6982,8 @@ const DEFAULT_SETTINGS_LAYOUT = {
             this.setupHotkeys(player);
             if (advancedSettings[ADVANCED_SETTINGS_MAP.showSkipIntroButton]) {
                 setupSkipIntroButton(player);
-                setupSkipEdButton(player);
-                setupFallbackOutroSkipButton(player, this.messenger);
+                setupSkipEdButton(player, this);
+                setupFallbackOutroSkipButton(player, this.messenger, this);
             }
 
             addTimelineMarkers(player);
@@ -7355,25 +7304,6 @@ const DEFAULT_SETTINGS_LAYOUT = {
                                 title ? `${title}${releaseYear ? `::${releaseYear}` : ''}` : null
                             );
 
-                            // Extract IMDb ID from page (used by IntroDB for S.to series)
-                            let imdbId = null;
-                            const imdbLink = document.querySelector('a[href*="imdb.com/title/tt"]');
-                            if (imdbLink) {
-                                const m = imdbLink.href.match(/(tt\d+)/);
-                                if (m) imdbId = m[1];
-                            }
-                            if (!imdbId) {
-                                // Fallback: check JSON-LD schema.org sameAs
-                                for (const el of document.querySelectorAll('script[type="application/ld+json"]')) {
-                                    try {
-                                        const json = JSON.parse(el.textContent);
-                                        const sameAs = [].concat(json.sameAs || []);
-                                        const found = sameAs.find(u => u.includes('imdb.com/title/tt'));
-                                        if (found) { imdbId = found.match(/(tt\d+)/)?.[1] || null; break; }
-                                    } catch {}
-                                }
-                            }
-
                             if (currentFranchiseId || episodeId) {
                                 this.commLink.commands[
                                     TopScopeInterface.messages.CURRENT_FRANCHISE_DATA
@@ -7386,7 +7316,6 @@ const DEFAULT_SETTINGS_LAYOUT = {
                                     animeSlug: slug,
                                     episodeNumber: episodeNumber ? parseInt(episodeNumber, 10) : null,
                                     seasonNumber: seasonNumber ? parseInt(seasonNumber, 10) : null,
-                                    imdbId: imdbId || null,
                                 });
                             }
 
@@ -7676,6 +7605,7 @@ const DEFAULT_SETTINGS_LAYOUT = {
         async goToNextVideo() {
             const Q = TopScopeInterface.queries;
             const newStoLayout = isNewStoLayout();
+            console.log('[Autoplay] goToNextVideo() called — layout:', newStoLayout ? 'new STO' : 'old/aniworld', '— url:', location.pathname);
 
             let nextEpisodeHref = null;
 
@@ -7704,25 +7634,75 @@ const DEFAULT_SETTINGS_LAYOUT = {
                 }
             } else {
                 // Old aniworld.to / legacy S.to layout
-                const [seasonsNav, episodesNav] = document.querySelectorAll(`${Q.navLinksContainer} > ul`);
-                const episodesNavLinks = [...episodesNav.querySelectorAll('a')];
-                const seasonNavLinks = [...seasonsNav.querySelectorAll('a')];
-                const currentEpisodeIndex = episodesNavLinks.findIndex(el => el.classList.contains('active'));
-                const currentSeasonIndex = seasonNavLinks.findIndex(el => el.classList.contains('active'));
+                const navLists = document.querySelectorAll(`${Q.navLinksContainer} > ul`);
+                const seasonsNav = navLists[0] || null;
+                const episodesNav = navLists[1] || null;
+                console.log('[Autoplay] Nav DOM: found', navLists.length, 'nav lists under', Q.navLinksContainer);
 
-                if (currentEpisodeIndex < episodesNavLinks.length - 1) {
-                    nextEpisodeHref = episodesNavLinks[currentEpisodeIndex + 1].href;
-                } else if (currentSeasonIndex < seasonNavLinks.length - 1) {
-                    // Do not proceed if this is a last movie
-                    // so it wont hop in to a season from a movie
-                    if (seasonNavLinks[currentSeasonIndex].href.endsWith('/filme')) return;
-                    const nextSeasonHref = seasonNavLinks[currentSeasonIndex + 1].href;
-                    const nextSeasonHtml = await (await fetch(nextSeasonHref)).text();
-                    const nextSeasonDom = (new DOMParser()).parseFromString(nextSeasonHtml, 'text/html');
-                    const firstEpisodeLink = nextSeasonDom.querySelector(
-                        `${Q.navLinksContainer} > ul a[data-episode-id]`
+                if (seasonsNav && episodesNav) {
+                    const episodesNavLinks = [...episodesNav.querySelectorAll('a')];
+                    const seasonNavLinks = [...seasonsNav.querySelectorAll('a')];
+                    const currentEpisodeIndex = episodesNavLinks.findIndex(el => el.classList.contains('active'));
+                    const currentSeasonIndex = seasonNavLinks.findIndex(el => el.classList.contains('active'));
+                    console.log('[Autoplay] Nav DOM: ep index', currentEpisodeIndex, 'of', episodesNavLinks.length, ', season index', currentSeasonIndex, 'of', seasonNavLinks.length);
+
+                    if (currentEpisodeIndex < episodesNavLinks.length - 1) {
+                        nextEpisodeHref = episodesNavLinks[currentEpisodeIndex + 1].href;
+                    } else if (currentSeasonIndex < seasonNavLinks.length - 1) {
+                        // Do not proceed if this is a last movie
+                        // so it wont hop in to a season from a movie
+                        if (seasonNavLinks[currentSeasonIndex].href.endsWith('/filme')) return;
+                        const nextSeasonHref = seasonNavLinks[currentSeasonIndex + 1].href;
+                        const nextSeasonHtml = await (await fetch(nextSeasonHref)).text();
+                        const nextSeasonDom = (new DOMParser()).parseFromString(nextSeasonHtml, 'text/html');
+                        const firstEpisodeLink = nextSeasonDom.querySelector(
+                            `${Q.navLinksContainer} > ul a[data-episode-id]`
+                        );
+                        if (firstEpisodeLink) nextEpisodeHref = firstEpisodeLink.href;
+                    }
+                }
+
+                // URL-based fallback for aniworld.to when nav DOM elements are missing
+                if (!nextEpisodeHref) {
+                    console.log('[Autoplay] Nav DOM gave no result — trying URL-based fallback');
+                    const urlMatch = location.pathname.match(
+                        /^\/anime\/stream\/([^/]+)\/(staffel-(\d+))\/episode-(\d+)$/i
                     );
-                    nextEpisodeHref = firstEpisodeLink.href;
+                    if (urlMatch) {
+                        const [, slug, staffelStr, seasonNumStr, epNumStr] = urlMatch;
+                        const nextEpNum = parseInt(epNumStr) + 1;
+                        const nextEpHref = `${location.origin}/anime/stream/${slug}/${staffelStr}/episode-${nextEpNum}`;
+                        try {
+                            const testResp = await fetch(nextEpHref);
+                            await testResp.text();
+                            if (testResp.ok && /\/episode-\d+/.test(new URL(testResp.url).pathname)) {
+                                nextEpisodeHref = nextEpHref;
+                                console.log('[Autoplay] URL-based nav: next episode', nextEpisodeHref);
+                            } else {
+                                // End of season — try first episode of next season
+                                const nextSeasonNum = parseInt(seasonNumStr) + 1;
+                                const nextSeasonHref = `${location.origin}/anime/stream/${slug}/staffel-${nextSeasonNum}`;
+                                const seasonResp = await fetch(nextSeasonHref);
+                                if (seasonResp.ok) {
+                                    const seasonDom = new DOMParser().parseFromString(
+                                        await seasonResp.text(), 'text/html'
+                                    );
+                                    const firstEpLink = [...seasonDom.querySelectorAll('a[href*="/anime/stream/"]')]
+                                        .find(a => new RegExp(`/staffel-${nextSeasonNum}/episode-1$`).test(
+                                            a.getAttribute('href') || ''
+                                        ));
+                                    if (firstEpLink) {
+                                        nextEpisodeHref = new URL(
+                                            firstEpLink.getAttribute('href'), location.origin
+                                        ).href;
+                                        console.log('[Autoplay] URL-based nav: next season', nextEpisodeHref);
+                                    }
+                                }
+                            }
+                        } catch (navErr) {
+                            console.warn('[Autoplay] URL-based nav error:', navErr.message);
+                        }
+                    }
                 }
             }
 
@@ -7853,6 +7833,7 @@ const DEFAULT_SETTINGS_LAYOUT = {
                     const preferredProvidersButtons = [
                         ...document.querySelectorAll(TopScopeInterface.queries.providerChangeBtn)
                     ].filter(el => el.parentElement.dataset.langKey === selectedLanguage);
+                    console.log('[Autoplay] Old layout provider: lang', selectedLanguage, ', generateInlinePlayer buttons:', preferredProvidersButtons.length);
                     let nextProviderName = null;
                     let nextVideoLink = null;
 
@@ -7889,7 +7870,62 @@ const DEFAULT_SETTINGS_LAYOUT = {
                         }
                     }
 
-                    if (!nextVideoHref) throw new Error('Embedded providers are missing or not supported');
+                    // Fallback: follow /redirect/{ID} links from fetched next episode HTML
+                    // (handles new aniworld.to structure where generateInlinePlayer no longer exists)
+                    if (!nextVideoHref) {
+                        const redirectLinks = [...nextEpisodeDom.querySelectorAll('a[href*="/redirect/"]')];
+                        if (redirectLinks.length > 0) {
+                            console.log('[Autoplay] Trying redirect-based provider selection,', redirectLinks.length, 'links');
+                            const resolvedLinks = await Promise.all(
+                                redirectLinks.map(link => new Promise(resolve => {
+                                    const href = link.getAttribute('href');
+                                    const fullUrl = href.startsWith('http') ? href : `${location.origin}${href}`;
+                                    GM_xmlhttpRequest({
+                                        method: 'HEAD',
+                                        url: fullUrl,
+                                        onload: r => resolve({ finalUrl: r.finalUrl }),
+                                        onerror: () => resolve(null),
+                                        timeout: 5000,
+                                    });
+                                }))
+                            );
+                            const resolvedDomains = resolvedLinks.map(r => {
+                                try { return r?.finalUrl ? new URL(r.finalUrl).hostname : null; } catch (_) { return null; }
+                            }).filter(Boolean);
+                            console.log('[Autoplay] Redirect links resolved — domains:', resolvedDomains);
+                            const providerUrlMap = {};
+                            for (const res of resolvedLinks) {
+                                if (!res?.finalUrl) continue;
+                                try {
+                                    const domain = new URL(res.finalUrl).hostname;
+                                    if (domain.includes('voe.sx') && !providerUrlMap[VIDEO_PROVIDERS_MAP.VOE]) {
+                                        providerUrlMap[VIDEO_PROVIDERS_MAP.VOE] = res.finalUrl;
+                                    } else if (
+                                        (domain.includes('vidmoly.to') || domain.includes('vidmoly.me')) &&
+                                        !providerUrlMap[VIDEO_PROVIDERS_MAP.Vidmoly]
+                                    ) {
+                                        providerUrlMap[VIDEO_PROVIDERS_MAP.Vidmoly] = res.finalUrl;
+                                    } else if (domain.includes('vidoza.net') && !providerUrlMap[VIDEO_PROVIDERS_MAP.Vidoza]) {
+                                        providerUrlMap[VIDEO_PROVIDERS_MAP.Vidoza] = res.finalUrl;
+                                    }
+                                } catch (_) {}
+                            }
+                            for (const id of coreSettings[CORE_SETTINGS_MAP.providersPriority]) {
+                                const name = VIDEO_PROVIDERS_IDS[id];
+                                if (providerUrlMap[name]) {
+                                    nextVideoHref = providerUrlMap[name];
+                                    nextProviderName = name;
+                                    console.log('[Autoplay] Redirect-based provider selected:', nextProviderName);
+                                    break;
+                                }
+                            }
+                        }
+                    }
+
+                    if (!nextVideoHref) {
+                        console.warn('[Autoplay] No provider found — redirect links in next episode DOM:', nextEpisodeDom.querySelectorAll('a[href*="/redirect/"]').length);
+                        throw new Error('Embedded providers are missing or not supported');
+                    }
 
                     try {
                         document.querySelector(Q.playerIframe).src = nextVideoHref;
@@ -7958,7 +7994,7 @@ const DEFAULT_SETTINGS_LAYOUT = {
 
             try {
                 const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
-                await fetch('https://s.to/api/episodes/watched', {
+                await fetch(`${location.protocol}//${location.hostname}/api/episodes/watched`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -7980,19 +8016,13 @@ const DEFAULT_SETTINGS_LAYOUT = {
 
         // Setup click handlers for new S.to provider buttons
         setupNewStoProviderHandlers() {
-            const buttons = [...document.querySelectorAll('#episode-links .link-box')];
-            console.log(`[Lang] setupNewStoProviderHandlers — found ${buttons.length} buttons:`,
-                buttons.map(b => ({ languageId: b.dataset.languageId, provider: b.dataset.providerName, active: b.classList.contains('active') }))
-            );
-
-            buttons.forEach((btn) => {
+            document.querySelectorAll('#episode-links .link-box').forEach((btn) => {
                 // Remove existing listeners by cloning
                 const newBtn = btn.cloneNode(true);
                 btn.parentNode.replaceChild(newBtn, btn);
 
                 newBtn.addEventListener('click', (ev) => {
                     ev.preventDefault();
-                    console.log(`[Lang] Provider clicked — languageId: ${newBtn.dataset.languageId}, provider: ${newBtn.dataset.providerName}, playUrl: ${newBtn.dataset.playUrl}`);
 
                     // Remove active class from all buttons
                     document.querySelectorAll('#episode-links .link-box').forEach(b => {
@@ -8002,27 +8032,13 @@ const DEFAULT_SETTINGS_LAYOUT = {
                     // Add active class to clicked button
                     newBtn.classList.add('active');
 
-                    // Persist the chosen language so it survives episode navigation
-                    if (newBtn.dataset.languageId) {
-                        const prev = coreSettings[CORE_SETTINGS_MAP.videoLanguagePreferredID];
-                        coreSettings[CORE_SETTINGS_MAP.videoLanguagePreferredID] = newBtn.dataset.languageId;
-                        console.log(`[Lang] Saved languageId: ${prev} → ${newBtn.dataset.languageId}`);
-                    } else {
-                        console.warn('[Lang] Clicked button has no data-language-id — language not saved');
-                    }
-
                     // Update iframe src
                     const playUrl = newBtn.dataset.playUrl;
                     if (playUrl) {
                         const iframe = document.querySelector('#player-iframe');
                         if (iframe) {
-                            console.log(`[Lang] Setting iframe src to: ${playUrl}`);
                             iframe.src = playUrl;
-                        } else {
-                            console.warn('[Lang] #player-iframe not found');
                         }
-                    } else {
-                        console.warn('[Lang] Clicked button has no data-play-url');
                     }
 
                     // Update player meta suffix
@@ -8141,15 +8157,11 @@ const DEFAULT_SETTINGS_LAYOUT = {
             // Get available language IDs from provider buttons
             const availableLangIDs = [...new Set(providerButtons.map(btn => btn.dataset.languageId))];
 
-            console.log(`[Lang] updateVideoLanguageProcessingNewSto — stored: "${selectedLanguage}", available: [${availableLangIDs.join(', ')}]`);
-
             // Checks preferred language and if it is missing, it takes first available
             if (!selectedLanguage || !availableLangIDs.includes(selectedLanguage)) {
                 if (availableLangIDs.length) {
-                    console.log(`[Lang] Stored language "${selectedLanguage}" not available — falling back to "${availableLangIDs[0]}"`);
                     selectedLanguage = availableLangIDs[0];
                 } else {
-                    console.warn('[Lang] No provider buttons with languageId found');
                     return { selectedLanguage: null };
                 }
             }
@@ -8157,7 +8169,6 @@ const DEFAULT_SETTINGS_LAYOUT = {
             // Setup click handlers for provider buttons
             this.setupNewStoProviderHandlers();
 
-            console.log(`[Lang] Using language: "${selectedLanguage}"`);
             return {
                 selectedLanguage
             };
@@ -8264,13 +8275,11 @@ const DEFAULT_SETTINGS_LAYOUT = {
 
             const result = topScopeInterface.updateVideoLanguageProcessing();
             const selectedLanguage = result?.selectedLanguage;
-            console.log(`[Lang] Page init — selectedLanguage from processing: "${selectedLanguage}"`);
 
             if (suppressAutoProviderLoadOnce) return;
 
             // Find and click preferred provider for selected language
             const providerButtons = [...document.querySelectorAll('#episode-links .link-box')];
-            console.log(`[Lang] All provider buttons:`, providerButtons.map(b => ({ languageId: b.dataset.languageId, provider: b.dataset.providerName })));
 
             // Filter by language if set
             let filteredButtons = providerButtons;
@@ -8278,9 +8287,7 @@ const DEFAULT_SETTINGS_LAYOUT = {
                 filteredButtons = providerButtons.filter(btn =>
                     btn.dataset.languageId === selectedLanguage
                 );
-                console.log(`[Lang] Filtered to language "${selectedLanguage}": ${filteredButtons.length} buttons`);
                 if (filteredButtons.length === 0) {
-                    console.warn(`[Lang] No buttons for language "${selectedLanguage}" — using all`);
                     filteredButtons = providerButtons;
                 }
             }
@@ -8292,7 +8299,6 @@ const DEFAULT_SETTINGS_LAYOUT = {
                     btn.dataset.providerName === preferredProviderName
                 );
                 if (matchingBtn) {
-                    console.log(`[Lang] Auto-clicking provider "${preferredProviderName}" (lang: "${matchingBtn.dataset.languageId}", already active: ${matchingBtn.classList.contains('active')})`);
                     // Check if it's already active (already loaded)
                     if (!matchingBtn.classList.contains('active')) {
                         matchingBtn.click();
