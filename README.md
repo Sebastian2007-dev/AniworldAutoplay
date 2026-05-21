@@ -7,12 +7,17 @@ Based on the [Aniworld.to & S.to Autoplay](https://greasyfork.org/de/scripts/518
 ## Features
 
 - **Autoplay** — automatically loads the next episode when the current one ends
-- **Automatic intro skip** — detects and skips intros via the [AniSkip API](https://api.aniskip.com) and [AnimeSkip API](https://api.anime-skip.com)
+- **Automatic intro & outro skip** — detects and skips intros and outros via the [AniSkip API](https://api.aniskip.com) and [AnimeSkip API](https://api.anime-skip.com)
+- **Local skip times** — saves custom intro/outro timestamps per episode locally; survives API outages and works for shows with no API data
+- **Skip times editor** — in-page dialog to correct or submit intro/outro timestamps for the current episode (openable from the popup)
+- **No-data cache** — caches "no data" API responses to avoid redundant requests; clearable from the popup's AniSkip tab
 - **Playback memory** — resumes where you left off after a page reload
 - **Language memory** — remembers your preferred stream language/provider
 - **Persistent volume** — keeps your volume level across episodes and page loads
 - **Age-gate blocker** — auto-dismisses 18+ overlays injected by video providers (VOE, Doodstream, Filemoon, etc.)
-- **Debug log panel** — live log viewer in the popup with level filters (Log / Warn / Error)
+- **Customizable keyboard shortcuts** — configurable hotkeys for fast-forward, rewind, fullscreen, and large skip (defaults: `→`, `←`, `F`, `V`)
+- **In-page settings panel** — full settings UI embedded directly in the video player page
+- **Debug log panel** — live log viewer in the popup with level filters (All / Log / Warn / Error) and auto-scroll
 
 ## Installation
 
@@ -35,17 +40,37 @@ Since the extension is not published to the Chrome Web Store, install it manuall
 | Setting | Description |
 | --- | --- |
 | Autoplay | Automatically play the next episode |
-| Auto intro skip | Skip intros immediately when detected |
+| Auto intro skip | Skip intros and outros immediately when detected |
 | Playback memory | Restore playback position on reload |
-| AniSkip API | Fetch intro timestamps automatically |
+| AniSkip API | Fetch intro/outro timestamps automatically |
 | Notifications | Show AniSkip status as an in-page popup |
 | AnimeSkip Client ID | Your own API key from [anime-skip.com](https://anime-skip.com) (leave empty to use the shared test key) |
+| Max. stored skip entries | How many local skip-time records to keep; oldest are pruned when the limit is exceeded (default: 500) |
+
+### AniSkip Tab (Popup)
+
+| Action | Description |
+| --- | --- |
+| Edit Intro / Edit Outro | Open the in-page skip-times editor for the current episode |
+| Clear "No data" cache | Force the extension to re-query both APIs on the next episode load |
+| Clear local skip times | Delete all locally stored intro/outro timestamps |
 
 ## Supported Sites
 
 - `aniworld.to`
 - `s.to`
 - `serienstream.to`
+
+## Keyboard Shortcuts
+
+Default hotkeys (configurable in the in-page settings panel):
+
+| Key | Action |
+| --- | --- |
+| `→` | Fast-forward |
+| `←` | Rewind |
+| `F` | Toggle fullscreen |
+| `V` | Large skip |
 
 ## Tech Stack
 
