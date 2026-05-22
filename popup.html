@@ -16,26 +16,26 @@
   </div>
 
   <div class="tabs">
-    <div class="tab active" data-tab="logs">📋 Logs</div>
-    <div class="tab" data-tab="aniskip">⏭️ AniSkip</div>
-    <div class="tab" data-tab="settings">⚙️ Einstellungen</div>
+    <div class="tab active" data-tab="logs" data-i18n="tab.logs">📋 Logs</div>
+    <div class="tab" data-tab="aniskip" data-i18n="tab.aniskip">⏭️ AniSkip</div>
+    <div class="tab" data-tab="settings" data-i18n="tab.settings">⚙️ Einstellungen</div>
   </div>
 
   <!-- LOG PANEL -->
   <div class="panel active" id="panel-logs">
     <div class="log-toolbar">
-      <button class="log-filter-btn active" data-level="all">Alle</button>
-      <button class="log-filter-btn level-log"   data-level="log">Log</button>
-      <button class="log-filter-btn level-warn"  data-level="warn">Warn</button>
-      <button class="log-filter-btn level-error" data-level="error">Error</button>
+      <button class="log-filter-btn active" data-level="all" data-i18n="logs.all">Alle</button>
+      <button class="log-filter-btn level-log"   data-level="log"   data-i18n="logs.log">Log</button>
+      <button class="log-filter-btn level-warn"  data-level="warn"  data-i18n="logs.warn">Warn</button>
+      <button class="log-filter-btn level-error" data-level="error" data-i18n="logs.error">Error</button>
       <span class="spacer"></span>
       <label class="autoscroll-label">
-        <input type="checkbox" id="autoScroll" checked> Auto-scroll
+        <input type="checkbox" id="autoScroll" checked> <span data-i18n="logs.autoscroll">Auto-scroll</span>
       </label>
-      <button class="btn-sm" id="clearLogs">Löschen</button>
+      <button class="btn-sm" id="clearLogs" data-i18n="logs.clear">Löschen</button>
     </div>
     <div id="log-container">
-      <div class="log-empty" id="log-empty">Noch keine Logs — öffne eine Aniworld- oder S.to-Seite.</div>
+      <div class="log-empty" id="log-empty" data-i18n="logs.empty">Noch keine Logs — öffne eine Aniworld- oder S.to-Seite.</div>
     </div>
   </div>
 
@@ -44,22 +44,22 @@
     <div class="aniskip-body">
 
       <div class="aniskip-card">
-        <div class="aniskip-card-title">Skip-Zeiten bearbeiten</div>
+        <div class="aniskip-card-title" data-i18n="aniskip.editTitle">Skip-Zeiten bearbeiten</div>
         <div style="display:flex;gap:8px;margin-bottom:8px;">
-          <button class="btn-aniskip" id="editIntroTimes" style="flex:1">✎ Intro</button>
-          <button class="btn-aniskip" id="editOutroTimes" style="flex:1">✎ Outro</button>
+          <button class="btn-aniskip" id="editIntroTimes" style="flex:1" data-i18n="aniskip.editIntro">✎ Intro</button>
+          <button class="btn-aniskip" id="editOutroTimes" style="flex:1" data-i18n="aniskip.editOutro">✎ Outro</button>
         </div>
-        <p class="aniskip-hint">Öffnet den Dialog zum Korrigieren oder Einreichen von Skip-Zeiten für die aktuelle Episode. Funktioniert nur wenn AniSkip-Daten für die Folge geladen wurden.</p>
+        <p class="aniskip-hint" data-i18n="aniskip.editHint">Öffnet den Dialog zum Korrigieren oder Einreichen von Skip-Zeiten für die aktuelle Episode. Funktioniert nur wenn AniSkip-Daten für die Folge geladen wurden.</p>
       </div>
 
       <div class="aniskip-card">
-        <div class="aniskip-card-title">Cache</div>
+        <div class="aniskip-card-title" data-i18n="aniskip.cacheTitle">Cache</div>
         <div class="setting-row" style="padding:0">
           <div>
-            <div class="setting-label">„No data"-Cache leeren</div>
-            <div class="setting-desc">APIs sofort erneut abfragen statt gecachtes „keine Daten" zu verwenden</div>
+            <div class="setting-label" data-i18n="aniskip.cacheLabel">„No data"-Cache leeren</div>
+            <div class="setting-desc" data-i18n="aniskip.cacheDesc">APIs sofort erneut abfragen statt gecachtes „keine Daten" zu verwenden</div>
           </div>
-          <button class="btn-sm" id="clearNoDataCache">Leeren</button>
+          <button class="btn-sm" id="clearNoDataCache" data-i18n="aniskip.cacheClear">Leeren</button>
         </div>
       </div>
 
@@ -70,75 +70,89 @@
   <div class="panel" id="panel-settings">
 
     <div class="settings-group">
-      <div class="settings-group-label">Wiedergabe</div>
+      <div class="settings-group-label" data-i18n="settings.language">Sprache / Language</div>
       <div class="setting-row">
         <div>
-          <div class="setting-label">Autoplay</div>
-          <div class="setting-desc">Nächste Episode automatisch abspielen</div>
+          <div class="setting-label" data-i18n="setting.language.label">Sprache</div>
+          <div class="setting-desc" data-i18n="setting.language.desc">Sprache der Benutzeroberfläche</div>
+        </div>
+        <select class="setting-select" id="s-language">
+          <option value="de">Deutsch</option>
+          <option value="en">English</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="settings-group">
+      <div class="settings-group-label" data-i18n="settings.playback">Wiedergabe</div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label" data-i18n="setting.autoplay.label">Autoplay</div>
+          <div class="setting-desc" data-i18n="setting.autoplay.desc">Nächste Episode automatisch abspielen</div>
         </div>
         <label class="toggle"><input type="checkbox" id="s-autoplay"><span class="toggle-slider"></span></label>
       </div>
       <div class="setting-row">
         <div>
-          <div class="setting-label">Intro automatisch überspringen</div>
-          <div class="setting-desc">Intro wird beim Erkennen sofort übersprungen</div>
+          <div class="setting-label" data-i18n="setting.skipIntro.label">Intro automatisch überspringen</div>
+          <div class="setting-desc" data-i18n="setting.skipIntro.desc">Intro wird beim Erkennen sofort übersprungen</div>
         </div>
         <label class="toggle"><input type="checkbox" id="s-autoSkipIntro"><span class="toggle-slider"></span></label>
       </div>
       <div class="setting-row">
         <div>
-          <div class="setting-label">Wiedergabeposition merken</div>
-          <div class="setting-desc">Fortschritt beim Reload wiederherstellen</div>
+          <div class="setting-label" data-i18n="setting.playbackMem.label">Wiedergabeposition merken</div>
+          <div class="setting-desc" data-i18n="setting.playbackMem.desc">Fortschritt beim Reload wiederherstellen</div>
         </div>
         <label class="toggle"><input type="checkbox" id="s-playbackMem"><span class="toggle-slider"></span></label>
       </div>
     </div>
 
     <div class="settings-group">
-      <div class="settings-group-label">AniSkip / AnimeSkip <span style="color:#555570;font-weight:400;text-transform:none;letter-spacing:0">(nur Aniworld.to)</span></div>
+      <div class="settings-group-label">AniSkip / AnimeSkip <span style="color:#555570;font-weight:400;text-transform:none;letter-spacing:0" data-i18n="settings.aniskipSuffix">(nur Aniworld.to)</span></div>
       <div class="setting-row">
         <div>
-          <div class="setting-label">AniSkip API verwenden</div>
-          <div class="setting-desc">Intro-Timestamps automatisch abrufen</div>
+          <div class="setting-label" data-i18n="setting.useAniSkip.label">AniSkip API verwenden</div>
+          <div class="setting-desc" data-i18n="setting.useAniSkip.desc">Intro-Timestamps automatisch abrufen</div>
         </div>
         <label class="toggle"><input type="checkbox" id="s-useAniSkip"><span class="toggle-slider"></span></label>
       </div>
       <div class="setting-row">
         <div>
-          <div class="setting-label">Benachrichtigungen</div>
-          <div class="setting-desc">AniSkip-Status als Popup anzeigen</div>
+          <div class="setting-label" data-i18n="setting.notifications.label">Benachrichtigungen</div>
+          <div class="setting-desc" data-i18n="setting.notifications.desc">AniSkip-Status als Popup anzeigen</div>
         </div>
         <label class="toggle"><input type="checkbox" id="s-notifications"><span class="toggle-slider"></span></label>
       </div>
       <div class="setting-row">
         <div>
-          <div class="setting-label">AnimeSkip Client-ID</div>
-          <div class="setting-desc">Kostenlos auf anime-skip.com → Settings → Client Apps</div>
+          <div class="setting-label" data-i18n="setting.clientId.label">AnimeSkip Client-ID</div>
+          <div class="setting-desc" data-i18n="setting.clientId.desc">Kostenlos auf anime-skip.com → Settings → Client Apps</div>
         </div>
-        <input type="text" class="setting-input" id="s-animeSkipClientId" placeholder="Leer = Test-ID (rate-limited)">
+        <input type="text" class="setting-input" id="s-animeSkipClientId" data-i18n-ph="setting.clientId.placeholder" placeholder="Leer = Test-ID (rate-limited)">
       </div>
     </div>
 
     <div class="settings-group">
-      <div class="settings-group-label">Lokale Skip-Zeiten</div>
+      <div class="settings-group-label" data-i18n="settings.localSkip">Lokale Skip-Zeiten</div>
       <div class="setting-row">
         <div>
-          <div class="setting-label">Max. gespeicherte Einträge</div>
-          <div class="setting-desc">Älteste werden gelöscht wenn das Limit überschritten wird</div>
+          <div class="setting-label" data-i18n="setting.skipLimit.label">Max. gespeicherte Einträge</div>
+          <div class="setting-desc" data-i18n="setting.skipLimit.desc">Älteste werden gelöscht wenn das Limit überschritten wird</div>
         </div>
         <input type="number" class="setting-input" id="s-skipTimesLimit" min="10" max="9999" style="width:70px;text-align:center">
       </div>
       <div class="setting-row">
         <div>
-          <div class="setting-label">Gespeicherte Einträge</div>
-          <div class="setting-desc" id="skipTimesCount">Wird geladen…</div>
+          <div class="setting-label" data-i18n="setting.skipEntries.label">Gespeicherte Einträge</div>
+          <div class="setting-desc" id="skipTimesCount" data-i18n="setting.skipEntries.loading">Wird geladen…</div>
         </div>
-        <button class="btn-sm" id="clearLocalSkipTimes">Alle löschen</button>
+        <button class="btn-sm" id="clearLocalSkipTimes" data-i18n="setting.skipEntries.clearBtn">Alle löschen</button>
       </div>
     </div>
 
-    <button class="btn-primary" id="saveSettings">Speichern</button>
-    <div class="save-hint hidden" id="saveHint">✓ Gespeichert</div>
+    <button class="btn-primary" id="saveSettings" data-i18n="save.btn">Speichern</button>
+    <div class="save-hint hidden" id="saveHint" data-i18n="save.hint">✓ Gespeichert</div>
 
   </div>
 

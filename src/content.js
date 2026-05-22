@@ -124,7 +124,17 @@
     // from embedded video providers (VOE, Doodstream, Filemoon, etc.)
     // ============================================================
     (function installAgeGateBlocker() {
-        const POPUP_TEXT = /\b18\+|are\s+you\s+18|age\s+verif|altersverif|shop\s*now|jetzt\s+kauf|verkauf|buy\s+now|special\s+offer|sonderangebot/i;
+        // Text patterns for age gates, gambling ads and generic promotional popups
+        const POPUP_TEXT = /\b18\+|are\s+you\s+18|age\s+verif|altersverif|shop\s*now|jetzt\s+kauf|verkauf|buy\s+now|special\s+offer|sonderangebot|raffle|lottery|don'?t\s+miss|try\s+your\s+luck|miss\s+your\s+chance|free\s+spin|spin\s+to\s+win|claim\s+(now|your)|exclusive\s+(deal|offer|prize)|limited\s+(time\s+)?offer|gewinnspiel|gl[üu]cksspiel|jetzt\s+gewinnen|sicher\s+dir|hol\s+dir\s+deinen/i;
+
+        // Domains that should never appear as iframes in a video player context
+        const AD_DOMAIN_RE = /betvip\.|bet-vip\.|betway\.|bet365\.|betsson\.|unibet\.|bwin\.|888casino\.|casino|raffle\.|lottery\.|adnxs\.com|doubleclick\.net|googlesyndication\.com|popads\.net|popcash\.net|adsterra\.com|trafficjunky\.|exoclick\.com|juicyads\.|hilltopads\.|plugrush\.|adspyglass\.|tsyndicate\.|realsrv\.|adhese\.|adtelligent\.|mgid\.|outbrain\.|taboola\.|propellerads\./i;
+
+        function isAdSrc(src) {
+            if (!src || src === 'about:blank' || src.startsWith('blob:') || src.startsWith('data:')) return false;
+            try { return AD_DOMAIN_RE.test(new URL(src).hostname); }
+            catch (_) { return AD_DOMAIN_RE.test(src); }
+        }
 
         function looksLikeAgeGate(el) {
             return POPUP_TEXT.test(el.innerText || el.textContent || '');
@@ -149,12 +159,12 @@
                     return;
                 }
             }
-            // 3. Try to click any confirm/ok/yes button inside the overlay
+            // 3. Try to click any confirm/ok/yes/close button inside the overlay
             const buttons = el.querySelectorAll(
                 'button, [role="button"], input[type="button"], input[type="submit"], a, .btn, [class*="btn"], [class*="button"]'
             );
             for (const btn of buttons) {
-                if (/confirm|ok|yes|accept|bestätig|weiter|continue/i.test(btn.textContent || btn.value || '')) {
+                if (/confirm|ok|yes|accept|bestätig|weiter|continue|close|dismiss|no\s+thanks|nein\s+danke/i.test(btn.textContent || btn.value || '')) {
                     console.log('[AgeGateBlocker] Clicking confirm button:', (btn.textContent || btn.value).trim());
                     btn.click();
                     return;
@@ -165,7 +175,7 @@
                 console.log('[AgeGateBlocker] No button found in body — skipping hide to avoid breaking the page');
                 return;
             }
-            console.log('[AgeGateBlocker] Hiding age gate overlay:', el.tagName, el.id || el.className);
+            console.log('[AgeGateBlocker] Hiding overlay:', el.tagName, el.id || el.className);
             el.style.setProperty('display', 'none', 'important');
             el.style.setProperty('visibility', 'hidden', 'important');
             el.style.setProperty('pointer-events', 'none', 'important');
@@ -177,22 +187,31 @@
          */
         function removePopupIframe(iframe, reason) {
             const src = iframe.src || '(no src)';
-            const h = iframe.style.height || '?';
-            console.log(`[AgeGateBlocker] Removing popup iframe — ${reason} (src=${src}, h=${h})`);
+            console.log(`[AgeGateBlocker] Removing popup iframe — ${reason} (src=${src})`);
             iframe.remove();
         }
 
         /**
-         * Check a newly added iframe against two signals:
-         *   1. Style heuristic (border-radius + box-shadow) → remove immediately
-         *   2. Content check (readable same-origin doc with 18+ text) → remove on load
+         * Check a newly added iframe. Signals checked in order:
+         *   0. Known ad domain in src → remove immediately (works cross-origin)
+         *   1. Style heuristic (border-radius + box-shadow, or fixed+high-z) → remove immediately
+         *   2. Content check for same-origin readable docs → remove on load
+         *   3. Watch src attribute changes (lazy-loaded ad iframes)
          */
         function checkNewIframe(iframe) {
-            const s = iframe.style;
+            // Signal 0: known ad/gambling domain
+            if (isAdSrc(iframe.src)) {
+                removePopupIframe(iframe, 'ad-domain');
+                return;
+            }
 
-            // Signal 1: style heuristic — both border-radius AND box-shadow present
-            // is specific enough to be a styled popup card without false-positives
-            const hasStyleSignal = !!(s.borderRadius && s.boxShadow);
+            const s = iframe.style;
+            const zIndex = parseInt(s.zIndex || '0', 10);
+
+            // Signal 1: popup-like styling
+            const hasStyleSignal = !!(s.borderRadius && s.boxShadow)
+                || (s.position === 'fixed'    && zIndex > 1000)
+                || (s.position === 'absolute' && zIndex > 9000);
             if (hasStyleSignal) {
                 removePopupIframe(iframe, 'style-heuristic');
                 return;
@@ -204,6 +223,12 @@
                     const doc = iframe.contentDocument || iframe.contentWindow?.document;
                     if (doc && looksLikeAgeGate(doc.body || doc.documentElement)) {
                         removePopupIframe(iframe, 'content-match');
+                        return;
+                    }
+                    // Also check for ad domains loaded dynamically into about:blank iframes
+                    const loc = iframe.contentWindow?.location?.href;
+                    if (loc && isAdSrc(loc)) {
+                        removePopupIframe(iframe, 'content-ad-domain');
                     }
                 } catch (_) { /* cross-origin — skip */ }
             };
@@ -213,6 +238,15 @@
             } else {
                 iframe.addEventListener('load', check, { once: true });
             }
+
+            // Signal 3: watch src changes (some players set src after insertion)
+            const srcObserver = new MutationObserver(() => {
+                if (isAdSrc(iframe.src)) {
+                    removePopupIframe(iframe, 'src-mutated-to-ad');
+                    srcObserver.disconnect();
+                }
+            });
+            srcObserver.observe(iframe, { attributes: true, attributeFilter: ['src'] });
         }
 
         function scanAndDismiss(root) {
@@ -220,7 +254,9 @@
             const candidates = root.querySelectorAll(
                 '.modal, .overlay, .popup, .dialog, [class*="age"], [class*="gate"], ' +
                 '[class*="confirm"], [class*="adult"], [class*="verify"], ' +
-                '[id*="age"], [id*="gate"], [id*="confirm"], [id*="adult"]'
+                '[class*="raffle"], [class*="promo"], [class*="offer"], [class*="reward"], ' +
+                '[id*="age"], [id*="gate"], [id*="confirm"], [id*="adult"], ' +
+                '[id*="raffle"], [id*="promo"], [id*="offer"]'
             );
             for (const el of candidates) {
                 if (looksLikeAgeGate(el)) dismissAgeGate(el);
@@ -1196,8 +1232,11 @@
         },
     };
 
-    // Localization setup
-    const userLang = navigator.language.startsWith('de') ? 'de' : 'en';
+    // Localization setup — reads from extension settings (popup_language), falls back to browser language
+    let userLang = navigator.language.startsWith('de') ? 'de' : 'en';
+    chrome.storage.local.get('popup_language').then(data => {
+        if (data.popup_language) userLang = data.popup_language;
+    });
 
     // Global storage for AniSkip data (accessible by all functions)
     let globalAniSkipData = null;
@@ -1925,23 +1964,7 @@ const DEFAULT_SETTINGS_LAYOUT = {
                 document.cookie = 'molyast21=1; path=/; domain=.vidmoly.to';
 
                 const patch = document.createElement('script');
-                patch.innerHTML = `
-            (() => {
-                const og = window.jwplayer;
-                Object.defineProperty(window, 'jwplayer', {
-                    configurable: true,
-                    get: () => function(id) {
-                        const p = og(id);
-                        const s = p.setup;
-                        p.setup = function(cfg) {
-                            if (cfg.advertising) cfg.advertising = {};
-                            return s.call(this, cfg);
-                        };
-                        return p;
-                    }
-                });
-            })();
-        `;
+                patch.src = chrome.runtime.getURL('src/vidmoly-patch.js');
                 document.body.appendChild(patch);
             }
 
@@ -2847,33 +2870,62 @@ const DEFAULT_SETTINGS_LAYOUT = {
     async function restorePipIfNeeded(player) {
         const entry = GM_getValue('aw_pip_restore', null);
         if (!entry) return;
-        if ((Date.now() - entry._at) > 30000) {
+
+        const age = Date.now() - entry._at;
+        if (age > 30000) {
+            console.log(`[PiP] Restore flag expired (${age}ms old) — ignoring`);
             GM_deleteValue('aw_pip_restore');
             return;
         }
         GM_deleteValue('aw_pip_restore');
 
-        if (!document.pictureInPictureEnabled) return;
+        if (!document.pictureInPictureEnabled) {
+            console.warn('[PiP] Restore skipped — pictureInPictureEnabled is false');
+            return;
+        }
+
+        console.log(`[PiP] Restore flag found (age: ${age}ms) — waiting for video...`);
 
         // Wait until the video has actual content (readyState >= 2 = HAVE_CURRENT_DATA)
-        await new Promise((resolve) => {
-            if (player.readyState >= 2) { resolve(); return; }
-            player.addEventListener('canplay', resolve, { once: true });
-        });
+        if (player.readyState < 2) {
+            await new Promise((resolve) => {
+                player.addEventListener('canplay', resolve, { once: true });
+            });
+        }
+
+        console.log('[PiP] Video ready — attempt 1 (after canplay)...');
 
         try {
             await player.requestPictureInPicture();
-            console.log('[Autoplay] PiP restored for next episode');
+            console.log('[PiP] Restored successfully on attempt 1');
+            return;
         } catch (e) {
-            // Browser blocks PiP without user gesture if no PiP element exists yet.
-            // Show a small button — clicking it provides the required gesture.
-            console.warn('[Autoplay] PiP needs user gesture — showing restore button');
+            console.warn(`[PiP] Attempt 1 failed (${e.message}) — waiting for playing event...`);
+        }
+
+        // Attempt 2: wait until video is actually playing (some players need this)
+        await new Promise((resolve) => {
+            if (!player.paused) { resolve(); return; }
+            const onPlay = () => resolve();
+            player.addEventListener('playing', onPlay, { once: true });
+            setTimeout(() => { player.removeEventListener('playing', onPlay); resolve(); }, 3000);
+        });
+
+        console.log('[PiP] Attempt 2 (after playing)...');
+
+        try {
+            await player.requestPictureInPicture();
+            console.log('[PiP] Restored successfully on attempt 2');
+        } catch (e) {
+            console.warn(`[PiP] Attempt 2 failed (${e.message}) — user gesture required, showing button`);
             showPipRestoreButton(player);
         }
     }
 
     function showPipRestoreButton(player) {
-        if (document.querySelector('.aw-pip-restore-btn')) return; // already shown
+        if (document.querySelector('.aw-pip-restore-btn')) return;
+
+        console.log('[PiP] Showing restore button (waiting for user gesture)');
 
         GM_addStyle(`
             .aw-pip-restore-btn {
@@ -2900,17 +2952,23 @@ const DEFAULT_SETTINGS_LAYOUT = {
         btn.textContent = '⧉ PiP wiederherstellen';
         btn.addEventListener('click', async () => {
             btn.remove();
+            console.log('[PiP] User clicked restore button');
             try {
                 await player.requestPictureInPicture();
+                console.log('[PiP] Restored via user gesture');
             } catch (e) {
-                console.warn('[Autoplay] PiP restore failed:', e.message);
+                console.warn(`[PiP] Failed even with user gesture: ${e.message}`);
             }
         }, { once: true });
 
         document.body.appendChild(btn);
 
-        // Auto-remove after 10 seconds if not clicked
-        setTimeout(() => btn.remove(), 10000);
+        setTimeout(() => {
+            if (btn.isConnected) {
+                btn.remove();
+                console.log('[PiP] Restore button auto-dismissed after timeout');
+            }
+        }, 10000);
     }
 
     // Add visual markers on timeline for intro/outro
@@ -6310,7 +6368,7 @@ const DEFAULT_SETTINGS_LAYOUT = {
                     await sleep(200);
                     await playOrFix();
 
-                    restorePipIfNeeded(player);
+                    restorePipIfNeeded(player).catch(e => console.warn(`[PiP] Unexpected restore error: ${e.message}`));
                     return;
                 } catch (e) {
                     lastError = e;
@@ -6455,7 +6513,7 @@ const DEFAULT_SETTINGS_LAYOUT = {
                     // Remember PiP state so the next episode can restore it
                     if (document.pictureInPictureElement) {
                         GM_setValue('aw_pip_restore', { _at: Date.now() });
-                        console.log('[Autoplay] PiP active — will restore on next episode');
+                        console.log('[PiP] Active before autoplay — flagged for restoration on next episode');
                     }
 
                     this.messenger.sendMessage(IframeMessenger.messages.AUTOPLAY_NEXT);
@@ -6967,7 +7025,7 @@ const DEFAULT_SETTINGS_LAYOUT = {
                     await sleep(200);
                     await playOrFix();
 
-                    restorePipIfNeeded(player);
+                    restorePipIfNeeded(player).catch(e => console.warn(`[PiP] Unexpected restore error: ${e.message}`));
                     return;
                 } catch (e) {
                     lastError = e;

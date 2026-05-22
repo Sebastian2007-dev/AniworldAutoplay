@@ -71,7 +71,7 @@ const GMCompat = (() => {
   // Console interception — forwards tagged log lines to the popup via background
   // -------------------------------------------------------------------------
   const LOG_BATCH_MS = 200;
-  const LOG_PREFIXES = ['[AniSkip]', '[AnimeSkip]', '[CommLink]', '[GMCompat]', '[Autoplay]', '[Init]', '[AgeGateBlocker]'];
+  const LOG_PREFIXES = ['[AniSkip]', '[AnimeSkip]', '[CommLink]', '[GMCompat]', '[Autoplay]', '[Init]', '[AgeGateBlocker]', '[PiP]', '[SmartLoader]'];
   let _logBatch = [];
   let _logTimer = null;
 

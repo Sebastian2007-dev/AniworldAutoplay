@@ -2,6 +2,138 @@
 // Popup script — settings + live log viewer
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ── Translations ──────────────────────────────────────────────────────────────
+const TRANSLATIONS = {
+  de: {
+    'status.loading': 'Lädt...',
+    'status.active': 'Aktiv',
+    'status.inactive': 'Nicht aktiv',
+    'status.noTab': 'Kein Tab',
+    'tab.logs': '📋 Logs',
+    'tab.aniskip': '⏭️ AniSkip',
+    'tab.settings': '⚙️ Einstellungen',
+    'logs.all': 'Alle',
+    'logs.log': 'Log',
+    'logs.warn': 'Warn',
+    'logs.error': 'Error',
+    'logs.autoscroll': 'Auto-scroll',
+    'logs.clear': 'Löschen',
+    'logs.empty': 'Noch keine Logs — öffne eine Aniworld- oder S.to-Seite.',
+    'aniskip.editTitle': 'Skip-Zeiten bearbeiten',
+    'aniskip.editIntro': '✎ Intro',
+    'aniskip.editOutro': '✎ Outro',
+    'aniskip.editHint': 'Öffnet den Dialog zum Korrigieren oder Einreichen von Skip-Zeiten für die aktuelle Episode. Funktioniert nur wenn AniSkip-Daten für die Folge geladen wurden.',
+    'aniskip.cacheTitle': 'Cache',
+    'aniskip.cacheLabel': '„No data"-Cache leeren',
+    'aniskip.cacheDesc': 'APIs sofort erneut abfragen statt gecachtes „keine Daten" zu verwenden',
+    'aniskip.cacheClear': 'Leeren',
+    'aniskip.noSkip': 'Kein AniSkip',
+    'settings.language': 'Sprache / Language',
+    'settings.playback': 'Wiedergabe',
+    'settings.aniskipSuffix': '(nur Aniworld.to)',
+    'settings.localSkip': 'Lokale Skip-Zeiten',
+    'setting.language.label': 'Sprache',
+    'setting.language.desc': 'Sprache der Benutzeroberfläche',
+    'setting.autoplay.label': 'Autoplay',
+    'setting.autoplay.desc': 'Nächste Episode automatisch abspielen',
+    'setting.skipIntro.label': 'Intro automatisch überspringen',
+    'setting.skipIntro.desc': 'Intro wird beim Erkennen sofort übersprungen',
+    'setting.playbackMem.label': 'Wiedergabeposition merken',
+    'setting.playbackMem.desc': 'Fortschritt beim Reload wiederherstellen',
+    'setting.useAniSkip.label': 'AniSkip API verwenden',
+    'setting.useAniSkip.desc': 'Intro-Timestamps automatisch abrufen',
+    'setting.notifications.label': 'Benachrichtigungen',
+    'setting.notifications.desc': 'AniSkip-Status als Popup anzeigen',
+    'setting.clientId.label': 'AnimeSkip Client-ID',
+    'setting.clientId.desc': 'Kostenlos auf anime-skip.com → Settings → Client Apps',
+    'setting.clientId.placeholder': 'Leer = Test-ID (rate-limited)',
+    'setting.skipLimit.label': 'Max. gespeicherte Einträge',
+    'setting.skipLimit.desc': 'Älteste werden gelöscht wenn das Limit überschritten wird',
+    'setting.skipEntries.label': 'Gespeicherte Einträge',
+    'setting.skipEntries.loading': 'Wird geladen…',
+    'setting.skipEntries.count': n => `${n} Einträge aktuell gespeichert`,
+    'setting.skipEntries.deleted': n => `${n} gelöscht`,
+    'setting.skipEntries.clearBtn': 'Alle löschen',
+    'setting.cacheCleared': n => `${n} geleert!`,
+    'save.btn': 'Speichern',
+    'save.hint': '✓ Gespeichert',
+  },
+  en: {
+    'status.loading': 'Loading...',
+    'status.active': 'Active',
+    'status.inactive': 'Not active',
+    'status.noTab': 'No tab',
+    'tab.logs': '📋 Logs',
+    'tab.aniskip': '⏭️ AniSkip',
+    'tab.settings': '⚙️ Settings',
+    'logs.all': 'All',
+    'logs.log': 'Log',
+    'logs.warn': 'Warn',
+    'logs.error': 'Error',
+    'logs.autoscroll': 'Auto-scroll',
+    'logs.clear': 'Clear',
+    'logs.empty': 'No logs yet — open an Aniworld or S.to page.',
+    'aniskip.editTitle': 'Edit skip times',
+    'aniskip.editIntro': '✎ Intro',
+    'aniskip.editOutro': '✎ Outro',
+    'aniskip.editHint': 'Opens the dialog to correct or submit skip times for the current episode. Only works when AniSkip data has been loaded for the episode.',
+    'aniskip.cacheTitle': 'Cache',
+    'aniskip.cacheLabel': 'Clear "no data" cache',
+    'aniskip.cacheDesc': 'Re-query APIs immediately instead of using cached "no data" responses',
+    'aniskip.cacheClear': 'Clear',
+    'aniskip.noSkip': 'No AniSkip',
+    'settings.language': 'Language / Sprache',
+    'settings.playback': 'Playback',
+    'settings.aniskipSuffix': '(Aniworld.to only)',
+    'settings.localSkip': 'Local skip times',
+    'setting.language.label': 'Language',
+    'setting.language.desc': 'User interface language',
+    'setting.autoplay.label': 'Autoplay',
+    'setting.autoplay.desc': 'Automatically play the next episode',
+    'setting.skipIntro.label': 'Auto-skip intro',
+    'setting.skipIntro.desc': 'Skip intro immediately when detected',
+    'setting.playbackMem.label': 'Remember playback position',
+    'setting.playbackMem.desc': 'Restore progress on reload',
+    'setting.useAniSkip.label': 'Use AniSkip API',
+    'setting.useAniSkip.desc': 'Automatically fetch intro timestamps',
+    'setting.notifications.label': 'Notifications',
+    'setting.notifications.desc': 'Show AniSkip status as a popup',
+    'setting.clientId.label': 'AnimeSkip Client ID',
+    'setting.clientId.desc': 'Free at anime-skip.com → Settings → Client Apps',
+    'setting.clientId.placeholder': 'Empty = Test ID (rate-limited)',
+    'setting.skipLimit.label': 'Max. stored entries',
+    'setting.skipLimit.desc': 'Oldest entries are deleted when the limit is exceeded',
+    'setting.skipEntries.label': 'Stored entries',
+    'setting.skipEntries.loading': 'Loading…',
+    'setting.skipEntries.count': n => `${n} entries currently stored`,
+    'setting.skipEntries.deleted': n => `${n} deleted`,
+    'setting.skipEntries.clearBtn': 'Delete all',
+    'setting.cacheCleared': n => `${n} cleared!`,
+    'save.btn': 'Save',
+    'save.hint': '✓ Saved',
+  },
+};
+
+let currentLang = 'de';
+let currentStatusKey = 'status.loading';
+
+function t(key, arg) {
+  const val = (TRANSLATIONS[currentLang] ?? TRANSLATIONS['de'])[key] ?? TRANSLATIONS['de'][key] ?? key;
+  return typeof val === 'function' ? val(arg) : val;
+}
+
+function applyLanguage(lang) {
+  currentLang = lang;
+  document.documentElement.lang = lang;
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    el.textContent = t(el.dataset.i18n);
+  });
+  document.querySelectorAll('[data-i18n-ph]').forEach(el => {
+    el.placeholder = t(el.dataset.i18nPh);
+  });
+  statusLabel.textContent = t(currentStatusKey);
+}
+
 // ── Tabs ──────────────────────────────────────────────────────────────────────
 document.querySelectorAll('.tab').forEach(tab => {
   tab.addEventListener('click', () => {
@@ -18,34 +150,35 @@ const statusDot   = document.getElementById('statusDot');
 const statusLabel = document.getElementById('statusLabel');
 
 chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
-  if (!tab) { statusLabel.textContent = 'Kein Tab'; return; }
+  if (!tab) {
+    currentStatusKey = 'status.noTab';
+    statusLabel.textContent = t(currentStatusKey);
+    return;
+  }
   const url = tab.url || '';
   const isAniworld = /^https?:\/\/(aniworld\.to|s\.to|serienstream\.to)/.test(url);
   if (isAniworld) {
     statusDot.classList.add('active');
-    statusLabel.textContent = 'Aktiv';
+    currentStatusKey = 'status.active';
   } else {
-    statusLabel.textContent = 'Nicht aktiv';
+    currentStatusKey = 'status.inactive';
   }
+  statusLabel.textContent = t(currentStatusKey);
 });
 
 // ── Settings ──────────────────────────────────────────────────────────────────
-// Settings stored as properties inside DataStore JSON objects in chrome.storage.local.
-// storeKey = the chrome.storage key holding the JSON blob
-// prop     = the property inside that JSON blob
-// default  = fallback value when the store doesn't exist yet
 const NESTED_SETTINGS = [
-  { elId: 's-autoplay',      storeKey: 'coreSettings',     prop: 'isAutoplayEnabled',    default: false },
-  { elId: 's-autoSkipIntro', storeKey: 'coreSettings',     prop: 'autoSkipIntro',         default: true  },
-  { elId: 's-playbackMem',   storeKey: 'mainSettings',     prop: 'playbackPositionMemory',default: true  },
-  { elId: 's-useAniSkip',    storeKey: 'advancedSettings', prop: 'useAniSkip',            default: true  },
-  { elId: 's-notifications', storeKey: 'advancedSettings', prop: 'showAniSkipNotifications', default: true },
+  { elId: 's-autoplay',      storeKey: 'coreSettings',     prop: 'isAutoplayEnabled',       default: true  },
+  { elId: 's-autoSkipIntro', storeKey: 'coreSettings',     prop: 'autoSkipIntro',            default: true  },
+  { elId: 's-playbackMem',   storeKey: 'mainSettings',     prop: 'playbackPositionMemory',   default: true  },
+  { elId: 's-useAniSkip',    storeKey: 'advancedSettings', prop: 'useAniSkip',               default: true  },
+  { elId: 's-notifications', storeKey: 'advancedSettings', prop: 'showAniSkipNotifications', default: true  },
 ];
 
-// Flat settings stored directly as top-level chrome.storage.local keys
 const FLAT_SETTINGS = [
-  { elId: 's-animeSkipClientId', storageKey: 'animeSkipClientId',      default: ''  },
-  { elId: 's-skipTimesLimit',    storageKey: 'aw_local_skiptimes_limit', default: 500 },
+  { elId: 's-language',          storageKey: 'popup_language',              default: 'de' },
+  { elId: 's-animeSkipClientId', storageKey: 'animeSkipClientId',           default: ''   },
+  { elId: 's-skipTimesLimit',    storageKey: 'aw_local_skiptimes_limit',    default: 500  },
 ];
 
 async function loadSettings() {
@@ -68,18 +201,16 @@ async function loadSettings() {
     el.value = el.type === 'number' ? Number(val) : (val || '');
   }
 
-  // Show current local skip-times entry count
   const allKeys = await chrome.storage.local.get(null);
   const count = Object.keys(allKeys).filter(k => k.startsWith('aw_local_skiptimes::')).length;
   const countEl = document.getElementById('skipTimesCount');
-  if (countEl) countEl.textContent = `${count} Einträge aktuell gespeichert`;
+  if (countEl) countEl.textContent = t('setting.skipEntries.count', count);
 }
 
 document.getElementById('saveSettings').addEventListener('click', async () => {
   const storeKeys = [...new Set(NESTED_SETTINGS.map(s => s.storeKey))];
   const data = await chrome.storage.local.get(storeKeys);
 
-  // Update each nested JSON blob
   const toSave = {};
   for (const { elId, storeKey, prop } of NESTED_SETTINGS) {
     const el = document.getElementById(elId);
@@ -89,12 +220,10 @@ document.getElementById('saveSettings').addEventListener('click', async () => {
     }
     toSave[storeKey][prop] = el.checked;
   }
-  // Serialize back to JSON strings
   for (const key of Object.keys(toSave)) {
     toSave[key] = JSON.stringify(toSave[key]);
   }
 
-  // Flat settings
   for (const { elId, storageKey } of FLAT_SETTINGS) {
     const el = document.getElementById(elId);
     if (!el) continue;
@@ -108,7 +237,16 @@ document.getElementById('saveSettings').addEventListener('click', async () => {
   setTimeout(() => hint.classList.add('hidden'), 2000);
 });
 
-loadSettings();
+// Language changes apply immediately without needing to click Save
+document.getElementById('s-language').addEventListener('change', async e => {
+  const lang = e.target.value;
+  await chrome.storage.local.set({ popup_language: lang });
+  applyLanguage(lang);
+  const allKeys = await chrome.storage.local.get(null);
+  const count = Object.keys(allKeys).filter(k => k.startsWith('aw_local_skiptimes::')).length;
+  const countEl = document.getElementById('skipTimesCount');
+  if (countEl) countEl.textContent = t('setting.skipEntries.count', count);
+});
 
 // ── Edit skip times ───────────────────────────────────────────────────────────
 function openSkipTimesDialog(dialogType) {
@@ -119,7 +257,7 @@ function openSkipTimesDialog(dialogType) {
     chrome.tabs.sendMessage(tab.id, { type: 'OPEN_SKIP_TIMES_DIALOG', dialogType }, (res) => {
       if (chrome.runtime.lastError || !res?.ok) {
         const orig = btn.textContent;
-        btn.textContent = 'Kein AniSkip';
+        btn.textContent = t('aniskip.noSkip');
         setTimeout(() => { btn.textContent = orig; }, 2000);
       }
     });
@@ -131,12 +269,10 @@ document.getElementById('editOutroTimes').addEventListener('click', () => openSk
 // ── Clear AniSkip no-data cache ───────────────────────────────────────────────
 document.getElementById('clearNoDataCache').addEventListener('click', async () => {
   const btn = document.getElementById('clearNoDataCache');
-
-  // Tell background to forward the clear request to the active tab's content script
   chrome.runtime.sendMessage({ type: 'CLEAR_NODATA_CACHE' }, (res) => {
     const count = res?.cleared ?? '?';
     const orig = btn.textContent;
-    btn.textContent = `${count} geleert!`;
+    btn.textContent = t('setting.cacheCleared', count);
     setTimeout(() => { btn.textContent = orig; }, 2000);
   });
 });
@@ -144,7 +280,7 @@ document.getElementById('clearNoDataCache').addEventListener('click', async () =
 // ── Log rendering ─────────────────────────────────────────────────────────────
 const logContainer = document.getElementById('log-container');
 const logEmpty     = document.getElementById('log-empty');
-let allLogs        = [];   // {ts, src, level, msg}
+let allLogs        = [];
 let activeFilter   = 'all';
 let autoScroll     = true;
 
@@ -155,7 +291,6 @@ document.getElementById('autoScroll').addEventListener('change', e => {
 document.getElementById('clearLogs').addEventListener('click', () => {
   allLogs = [];
   renderLogs();
-  // Also tell background to clear its buffer
   chrome.runtime.sendMessage({ type: 'CLEAR_LOGS' });
 });
 
@@ -182,7 +317,6 @@ function renderLogs() {
 
   logEmpty.style.display = 'none';
 
-  // Build fragment for performance
   const frag = document.createDocumentFragment();
   for (const entry of filtered) {
     frag.appendChild(buildEntryEl(entry));
@@ -244,9 +378,9 @@ document.getElementById('clearLocalSkipTimes').addEventListener('click', async (
   const keysToDelete = Object.keys(allKeys).filter(k => k.startsWith('aw_local_skiptimes::'));
   if (keysToDelete.length > 0) await chrome.storage.local.remove(keysToDelete);
   const orig = btn.textContent;
-  btn.textContent = `${keysToDelete.length} gelöscht`;
+  btn.textContent = t('setting.skipEntries.deleted', keysToDelete.length);
   const countEl = document.getElementById('skipTimesCount');
-  if (countEl) countEl.textContent = '0 Einträge aktuell gespeichert';
+  if (countEl) countEl.textContent = t('setting.skipEntries.count', 0);
   setTimeout(() => { btn.textContent = orig; }, 2000);
 });
 
@@ -265,9 +399,15 @@ function connectToBackground() {
   });
 
   port.onDisconnect.addListener(() => {
-    // Reconnect after a short delay if popup is still open
     setTimeout(connectToBackground, 1000);
   });
 }
 
-connectToBackground();
+// ── Init ──────────────────────────────────────────────────────────────────────
+(async () => {
+  const data = await chrome.storage.local.get('popup_language');
+  currentLang = data.popup_language || 'de';
+  applyLanguage(currentLang);
+  await loadSettings();
+  connectToBackground();
+})();
