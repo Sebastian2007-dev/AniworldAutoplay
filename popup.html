@@ -16,15 +16,16 @@
   </div>
 
   <div class="tabs">
-    <div class="tab active" data-tab="logs" data-i18n="tab.logs">📋 Logs</div>
-    <div class="tab" data-tab="aniskip" data-i18n="tab.aniskip">⏭️ AniSkip</div>
-    <div class="tab" data-tab="settings" data-i18n="tab.settings">⚙️ Einstellungen</div>
+    <div class="tab active" data-tab="logs"     data-i18n="tab.logs">📋 Logs</div>
+    <div class="tab"        data-tab="aniskip"  data-i18n="tab.aniskip">⏭️ AniSkip</div>
+    <div class="tab"        data-tab="settings" data-i18n="tab.settings">⚙️ Einstellungen</div>
+    <div class="tab"        data-tab="advanced" data-i18n="tab.advanced">🔧 Erweitert</div>
   </div>
 
   <!-- LOG PANEL -->
   <div class="panel active" id="panel-logs">
     <div class="log-toolbar">
-      <button class="log-filter-btn active" data-level="all" data-i18n="logs.all">Alle</button>
+      <button class="log-filter-btn active" data-level="all"   data-i18n="logs.all">Alle</button>
       <button class="log-filter-btn level-log"   data-level="log"   data-i18n="logs.log">Log</button>
       <button class="log-filter-btn level-warn"  data-level="warn"  data-i18n="logs.warn">Warn</button>
       <button class="log-filter-btn level-error" data-level="error" data-i18n="logs.error">Error</button>
@@ -42,7 +43,6 @@
   <!-- ANISKIP PANEL -->
   <div class="panel" id="panel-aniskip">
     <div class="aniskip-body">
-
       <div class="aniskip-card">
         <div class="aniskip-card-title" data-i18n="aniskip.editTitle">Skip-Zeiten bearbeiten</div>
         <div style="display:flex;gap:8px;margin-bottom:8px;">
@@ -51,18 +51,16 @@
         </div>
         <p class="aniskip-hint" data-i18n="aniskip.editHint">Öffnet den Dialog zum Korrigieren oder Einreichen von Skip-Zeiten für die aktuelle Episode. Funktioniert nur wenn AniSkip-Daten für die Folge geladen wurden.</p>
       </div>
-
       <div class="aniskip-card">
         <div class="aniskip-card-title" data-i18n="aniskip.cacheTitle">Cache</div>
         <div class="setting-row" style="padding:0">
           <div>
             <div class="setting-label" data-i18n="aniskip.cacheLabel">„No data"-Cache leeren</div>
-            <div class="setting-desc" data-i18n="aniskip.cacheDesc">APIs sofort erneut abfragen statt gecachtes „keine Daten" zu verwenden</div>
+            <div class="setting-desc"  data-i18n="aniskip.cacheDesc">APIs sofort erneut abfragen statt gecachtes „keine Daten" zu verwenden</div>
           </div>
           <button class="btn-sm" id="clearNoDataCache" data-i18n="aniskip.cacheClear">Leeren</button>
         </div>
       </div>
-
     </div>
   </div>
 
@@ -74,7 +72,7 @@
       <div class="setting-row">
         <div>
           <div class="setting-label" data-i18n="setting.language.label">Sprache</div>
-          <div class="setting-desc" data-i18n="setting.language.desc">Sprache der Benutzeroberfläche</div>
+          <div class="setting-desc"  data-i18n="setting.language.desc">Sprache der Benutzeroberfläche</div>
         </div>
         <select class="setting-select" id="s-language">
           <option value="de">Deutsch</option>
@@ -88,23 +86,69 @@
       <div class="setting-row">
         <div>
           <div class="setting-label" data-i18n="setting.autoplay.label">Autoplay</div>
-          <div class="setting-desc" data-i18n="setting.autoplay.desc">Nächste Episode automatisch abspielen</div>
+          <div class="setting-desc"  data-i18n="setting.autoplay.desc">Nächste Episode automatisch abspielen</div>
         </div>
         <label class="toggle"><input type="checkbox" id="s-autoplay"><span class="toggle-slider"></span></label>
       </div>
       <div class="setting-row">
         <div>
           <div class="setting-label" data-i18n="setting.skipIntro.label">Intro automatisch überspringen</div>
-          <div class="setting-desc" data-i18n="setting.skipIntro.desc">Intro wird beim Erkennen sofort übersprungen</div>
+          <div class="setting-desc"  data-i18n="setting.skipIntro.desc">Intro wird beim Erkennen sofort übersprungen</div>
         </div>
         <label class="toggle"><input type="checkbox" id="s-autoSkipIntro"><span class="toggle-slider"></span></label>
       </div>
       <div class="setting-row">
         <div>
           <div class="setting-label" data-i18n="setting.playbackMem.label">Wiedergabeposition merken</div>
-          <div class="setting-desc" data-i18n="setting.playbackMem.desc">Fortschritt beim Reload wiederherstellen</div>
+          <div class="setting-desc"  data-i18n="setting.playbackMem.desc">Fortschritt beim Reload wiederherstellen</div>
         </div>
         <label class="toggle"><input type="checkbox" id="s-playbackMem"><span class="toggle-slider"></span></label>
+      </div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label" data-i18n="setting.mutedAutoplay.label">Stummgeschaltetes Autoplay</div>
+          <div class="setting-desc"  data-i18n="setting.mutedAutoplay.desc">Autoplay stumm starten wenn der Browser es blockiert</div>
+        </div>
+        <label class="toggle"><input type="checkbox" id="s-mutedAutoplay"><span class="toggle-slider"></span></label>
+      </div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label" data-i18n="setting.autoSkipStart.label">Am Anfang überspringen</div>
+          <div class="setting-desc"  data-i18n="setting.autoSkipStart.desc">Automatisch am Anfang jeder Episode überspringen</div>
+        </div>
+        <label class="toggle"><input type="checkbox" id="s-autoSkipStart"><span class="toggle-slider"></span></label>
+      </div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label" data-i18n="setting.skipSecondsStart.label">Sekunden am Anfang</div>
+          <div class="setting-desc"  data-i18n="setting.skipSecondsStart.desc">Sekunden die am Anfang übersprungen werden</div>
+        </div>
+        <input type="number" class="setting-input" id="s-skipSecondsStart" min="0" max="300" step="1" style="width:70px;text-align:center">
+      </div>
+    </div>
+
+    <div class="settings-group">
+      <div class="settings-group-label" data-i18n="settings.skipSizes">Skip-Größen</div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label" data-i18n="setting.introSkipSize.label">Intro-Skipgröße, Sek</div>
+          <div class="setting-desc"  data-i18n="setting.introSkipSize.desc">Sekunden beim manuellen Intro-Skip</div>
+        </div>
+        <input type="number" class="setting-input" id="s-introSkipSize" min="0" max="300" step="1" style="width:70px;text-align:center">
+      </div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label" data-i18n="setting.outroThreshold.label">Outro-Schwelle, Sek</div>
+          <div class="setting-desc"  data-i18n="setting.outroThreshold.desc">Autoplay startet wenn weniger als diese Sekunden übrig sind</div>
+        </div>
+        <input type="number" class="setting-input" id="s-outroThreshold" min="1" max="300" step="1" style="width:70px;text-align:center">
+      </div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label" data-i18n="setting.showSkipBtn.label">Skip-Intro-Button anzeigen</div>
+          <div class="setting-desc"  data-i18n="setting.showSkipBtn.desc">Button zum manuellen Intro-Überspringen einblenden</div>
+        </div>
+        <label class="toggle"><input type="checkbox" id="s-showSkipBtn"><span class="toggle-slider"></span></label>
       </div>
     </div>
 
@@ -113,21 +157,21 @@
       <div class="setting-row">
         <div>
           <div class="setting-label" data-i18n="setting.useAniSkip.label">AniSkip API verwenden</div>
-          <div class="setting-desc" data-i18n="setting.useAniSkip.desc">Intro-Timestamps automatisch abrufen</div>
+          <div class="setting-desc"  data-i18n="setting.useAniSkip.desc">Intro-Timestamps automatisch abrufen</div>
         </div>
         <label class="toggle"><input type="checkbox" id="s-useAniSkip"><span class="toggle-slider"></span></label>
       </div>
       <div class="setting-row">
         <div>
           <div class="setting-label" data-i18n="setting.notifications.label">Benachrichtigungen</div>
-          <div class="setting-desc" data-i18n="setting.notifications.desc">AniSkip-Status als Popup anzeigen</div>
+          <div class="setting-desc"  data-i18n="setting.notifications.desc">AniSkip-Status als Popup anzeigen</div>
         </div>
         <label class="toggle"><input type="checkbox" id="s-notifications"><span class="toggle-slider"></span></label>
       </div>
       <div class="setting-row">
         <div>
           <div class="setting-label" data-i18n="setting.clientId.label">AnimeSkip Client-ID</div>
-          <div class="setting-desc" data-i18n="setting.clientId.desc">Kostenlos auf anime-skip.com → Settings → Client Apps</div>
+          <div class="setting-desc"  data-i18n="setting.clientId.desc">Kostenlos auf anime-skip.com → Settings → Client Apps</div>
         </div>
         <input type="text" class="setting-input" id="s-animeSkipClientId" data-i18n-ph="setting.clientId.placeholder" placeholder="Leer = Test-ID (rate-limited)">
       </div>
@@ -138,22 +182,161 @@
       <div class="setting-row">
         <div>
           <div class="setting-label" data-i18n="setting.skipLimit.label">Max. gespeicherte Einträge</div>
-          <div class="setting-desc" data-i18n="setting.skipLimit.desc">Älteste werden gelöscht wenn das Limit überschritten wird</div>
+          <div class="setting-desc"  data-i18n="setting.skipLimit.desc">Älteste werden gelöscht wenn das Limit überschritten wird</div>
         </div>
         <input type="number" class="setting-input" id="s-skipTimesLimit" min="10" max="9999" style="width:70px;text-align:center">
       </div>
       <div class="setting-row">
         <div>
           <div class="setting-label" data-i18n="setting.skipEntries.label">Gespeicherte Einträge</div>
-          <div class="setting-desc" id="skipTimesCount" data-i18n="setting.skipEntries.loading">Wird geladen…</div>
+          <div class="setting-desc"  id="skipTimesCount" data-i18n="setting.skipEntries.loading">Wird geladen…</div>
         </div>
         <button class="btn-sm" id="clearLocalSkipTimes" data-i18n="setting.skipEntries.clearBtn">Alle löschen</button>
       </div>
     </div>
 
-    <button class="btn-primary" id="saveSettings" data-i18n="save.btn">Speichern</button>
-    <div class="save-hint hidden" id="saveHint" data-i18n="save.hint">✓ Gespeichert</div>
+    <button class="btn-primary" id="saveSettings"   data-i18n="save.btn">Speichern</button>
+    <div class="save-hint hidden" id="saveHint"     data-i18n="save.hint">✓ Gespeichert</div>
+  </div>
 
+  <!-- ADVANCED PANEL -->
+  <div class="panel" id="panel-advanced">
+
+    <div class="settings-group">
+      <div class="settings-group-label" data-i18n="settings.behavior">Verhalten</div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label" data-i18n="setting.playOnSkip.label">Abspielen nach Skip</div>
+          <div class="setting-desc"  data-i18n="setting.playOnSkip.desc">Video abspielen nachdem Intro übersprungen wurde</div>
+        </div>
+        <label class="toggle"><input type="checkbox" id="s-playOnSkip"><span class="toggle-slider"></span></label>
+      </div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label" data-i18n="setting.highlightEpisodes.label">Besuchte Episoden hervorheben</div>
+          <div class="setting-desc"  data-i18n="setting.highlightEpisodes.desc">Gesehene Episoden markieren</div>
+        </div>
+        <label class="toggle"><input type="checkbox" id="s-highlightEpisodes"><span class="toggle-slider"></span></label>
+      </div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label" data-i18n="setting.preloadProviders.label">Andere Provider vorladen</div>
+          <div class="setting-desc"  data-i18n="setting.preloadProviders.desc">Alternative Anbieter im Hintergrund laden</div>
+        </div>
+        <label class="toggle"><input type="checkbox" id="s-preloadProviders"><span class="toggle-slider"></span></label>
+      </div>
+    </div>
+
+    <div class="settings-group">
+      <div class="settings-group-label" data-i18n="settings.timing">Timing</div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label" data-i18n="setting.skipBtnSeconds.label">Skip-Button Anzeige, Sek</div>
+          <div class="setting-desc"  data-i18n="setting.skipBtnSeconds.desc">Sekunden für die der Skip-Button sichtbar bleibt</div>
+        </div>
+        <input type="number" class="setting-input" id="s-skipBtnSeconds" min="5" max="600" step="1" style="width:70px;text-align:center">
+      </div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label" data-i18n="setting.markWatched.label">Als gesehen markieren, Sek</div>
+          <div class="setting-desc"  data-i18n="setting.markWatched.desc">Episode nach dieser Zeit als gesehen markieren (0 = aus)</div>
+        </div>
+        <input type="number" class="setting-input" id="s-markWatched" min="0" max="600" step="1" style="width:70px;text-align:center">
+      </div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label" data-i18n="setting.positionExpiry.label">Position ablaufen, Tage</div>
+          <div class="setting-desc"  data-i18n="setting.positionExpiry.desc">Gespeicherte Wiedergabeposition nach X Tagen löschen</div>
+        </div>
+        <input type="number" class="setting-input" id="s-positionExpiry" min="1" max="365" step="1" style="width:70px;text-align:center">
+      </div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label" data-i18n="setting.skipCooldown.label">Skip-Abklingzeit, ms</div>
+          <div class="setting-desc"  data-i18n="setting.skipCooldown.desc">Mindestzeit zwischen zwei Skips</div>
+        </div>
+        <input type="number" class="setting-input" id="s-skipCooldown" min="0" max="2000" step="10" style="width:70px;text-align:center">
+      </div>
+    </div>
+
+    <div class="settings-group">
+      <div class="settings-group-label" data-i18n="settings.hotkeys">Tastenkürzel</div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label" data-i18n="setting.keyBackward.label">Schnell zurück</div>
+          <div class="setting-desc"  data-i18n="setting.keyBackward.desc">Taste zum Rückspulen</div>
+        </div>
+        <input type="text" class="setting-input setting-input-key" id="s-keyBackward" maxlength="5">
+      </div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label" data-i18n="setting.keyForward.label">Schnell vor</div>
+          <div class="setting-desc"  data-i18n="setting.keyForward.desc">Taste zum Vorspulen</div>
+        </div>
+        <input type="text" class="setting-input setting-input-key" id="s-keyForward" maxlength="5">
+      </div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label" data-i18n="setting.keyFullscreen.label">Vollbild</div>
+          <div class="setting-desc"  data-i18n="setting.keyFullscreen.desc">Taste für Vollbildmodus</div>
+        </div>
+        <input type="text" class="setting-input setting-input-key" id="s-keyFullscreen" maxlength="5">
+      </div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label" data-i18n="setting.keyLargeSkip.label">Großer Skip</div>
+          <div class="setting-desc"  data-i18n="setting.keyLargeSkip.desc">Taste für Intro-Skip</div>
+        </div>
+        <input type="text" class="setting-input setting-input-key" id="s-keyLargeSkip" maxlength="5">
+      </div>
+    </div>
+
+    <div class="settings-group">
+      <div class="settings-group-label" data-i18n="settings.defaults">Standard-Werte</div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label" data-i18n="setting.defaultIntroSkip.label">Standard Intro-Skip, Sek</div>
+          <div class="setting-desc"  data-i18n="setting.defaultIntroSkip.desc">Standard-Intro-Skipgröße für neue Serien</div>
+        </div>
+        <input type="number" class="setting-input" id="s-defaultIntroSkip" min="0" max="300" step="1" style="width:70px;text-align:center">
+      </div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label" data-i18n="setting.defaultOutroThresh.label">Standard Outro-Schwelle, Sek</div>
+          <div class="setting-desc"  data-i18n="setting.defaultOutroThresh.desc">Standard-Outro-Schwelle für neue Serien</div>
+        </div>
+        <input type="number" class="setting-input" id="s-defaultOutroThresh" min="1" max="300" step="1" style="width:70px;text-align:center">
+      </div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label" data-i18n="setting.fastFwdSize.label">Schnellvorlauf, Sek</div>
+          <div class="setting-desc"  data-i18n="setting.fastFwdSize.desc">Sekunden beim Schnellvorlauf</div>
+        </div>
+        <input type="number" class="setting-input" id="s-fastFwdSize" min="1" max="60" step="1" style="width:70px;text-align:center">
+      </div>
+    </div>
+
+    <div class="settings-group">
+      <div class="settings-group-label" data-i18n="settings.network">Netzwerk</div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label" data-i18n="setting.corsProxy.label">CORS-Proxy</div>
+          <div class="setting-desc"  data-i18n="setting.corsProxy.desc">URL des CORS-Proxy-Servers</div>
+        </div>
+        <input type="text" class="setting-input" id="s-corsProxy" style="width:160px" data-i18n-ph="setting.corsProxy.placeholder" placeholder="https://...">
+      </div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label" data-i18n="setting.commlinkInterval.label">Commlink Intervall, ms</div>
+          <div class="setting-desc"  data-i18n="setting.commlinkInterval.desc">Polling-Intervall für iframe-Kommunikation</div>
+        </div>
+        <input type="number" class="setting-input" id="s-commlinkInterval" min="10" max="500" step="10" style="width:70px;text-align:center">
+      </div>
+    </div>
+
+    <button class="btn-primary btn-danger" id="resetSettings" data-i18n="save.reset">Auf Standard zurücksetzen</button>
+    <button class="btn-primary" id="saveSettingsAdv" data-i18n="save.btn" style="margin-top:6px">Speichern</button>
+    <div class="save-hint hidden" id="saveHintAdv" data-i18n="save.hint">✓ Gespeichert</div>
   </div>
 
   <script src="popup.js"></script>

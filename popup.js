@@ -12,6 +12,7 @@ const TRANSLATIONS = {
     'tab.logs': '📋 Logs',
     'tab.aniskip': '⏭️ AniSkip',
     'tab.settings': '⚙️ Einstellungen',
+    'tab.advanced': '🔧 Erweitert',
     'logs.all': 'Alle',
     'logs.log': 'Log',
     'logs.warn': 'Warn',
@@ -30,8 +31,14 @@ const TRANSLATIONS = {
     'aniskip.noSkip': 'Kein AniSkip',
     'settings.language': 'Sprache / Language',
     'settings.playback': 'Wiedergabe',
+    'settings.skipSizes': 'Skip-Größen',
     'settings.aniskipSuffix': '(nur Aniworld.to)',
     'settings.localSkip': 'Lokale Skip-Zeiten',
+    'settings.behavior': 'Verhalten',
+    'settings.timing': 'Timing',
+    'settings.hotkeys': 'Tastenkürzel',
+    'settings.defaults': 'Standard-Werte',
+    'settings.network': 'Netzwerk',
     'setting.language.label': 'Sprache',
     'setting.language.desc': 'Sprache der Benutzeroberfläche',
     'setting.autoplay.label': 'Autoplay',
@@ -40,6 +47,18 @@ const TRANSLATIONS = {
     'setting.skipIntro.desc': 'Intro wird beim Erkennen sofort übersprungen',
     'setting.playbackMem.label': 'Wiedergabeposition merken',
     'setting.playbackMem.desc': 'Fortschritt beim Reload wiederherstellen',
+    'setting.mutedAutoplay.label': 'Stummgeschaltetes Autoplay',
+    'setting.mutedAutoplay.desc': 'Autoplay stumm starten wenn der Browser es blockiert',
+    'setting.autoSkipStart.label': 'Am Anfang überspringen',
+    'setting.autoSkipStart.desc': 'Automatisch am Anfang jeder Episode überspringen',
+    'setting.skipSecondsStart.label': 'Sekunden am Anfang',
+    'setting.skipSecondsStart.desc': 'Sekunden die am Anfang übersprungen werden',
+    'setting.introSkipSize.label': 'Intro-Skipgröße, Sek',
+    'setting.introSkipSize.desc': 'Sekunden beim manuellen Intro-Skip',
+    'setting.outroThreshold.label': 'Outro-Schwelle, Sek',
+    'setting.outroThreshold.desc': 'Autoplay startet wenn weniger als diese Sekunden übrig sind',
+    'setting.showSkipBtn.label': 'Skip-Intro-Button anzeigen',
+    'setting.showSkipBtn.desc': 'Button zum manuellen Intro-Überspringen einblenden',
     'setting.useAniSkip.label': 'AniSkip API verwenden',
     'setting.useAniSkip.desc': 'Intro-Timestamps automatisch abrufen',
     'setting.notifications.label': 'Benachrichtigungen',
@@ -55,8 +74,43 @@ const TRANSLATIONS = {
     'setting.skipEntries.deleted': n => `${n} gelöscht`,
     'setting.skipEntries.clearBtn': 'Alle löschen',
     'setting.cacheCleared': n => `${n} geleert!`,
+    'setting.playOnSkip.label': 'Abspielen nach Skip',
+    'setting.playOnSkip.desc': 'Video abspielen nachdem Intro übersprungen wurde',
+    'setting.highlightEpisodes.label': 'Besuchte Episoden hervorheben',
+    'setting.highlightEpisodes.desc': 'Gesehene Episoden farblich markieren',
+    'setting.preloadProviders.label': 'Andere Provider vorladen',
+    'setting.preloadProviders.desc': 'Alternative Anbieter im Hintergrund laden',
+    'setting.skipBtnSeconds.label': 'Skip-Button Anzeige, Sek',
+    'setting.skipBtnSeconds.desc': 'Sekunden für die der Skip-Button sichtbar bleibt',
+    'setting.markWatched.label': 'Als gesehen markieren, Sek',
+    'setting.markWatched.desc': 'Episode nach dieser Zeit als gesehen markieren (0 = aus)',
+    'setting.positionExpiry.label': 'Position ablaufen, Tage',
+    'setting.positionExpiry.desc': 'Gespeicherte Wiedergabeposition nach X Tagen löschen',
+    'setting.skipCooldown.label': 'Skip-Abklingzeit, ms',
+    'setting.skipCooldown.desc': 'Mindestzeit zwischen zwei Skips',
+    'setting.keyBackward.label': 'Schnell zurück',
+    'setting.keyBackward.desc': 'Taste zum Rückspulen',
+    'setting.keyForward.label': 'Schnell vor',
+    'setting.keyForward.desc': 'Taste zum Vorspulen',
+    'setting.keyFullscreen.label': 'Vollbild',
+    'setting.keyFullscreen.desc': 'Taste für Vollbildmodus',
+    'setting.keyLargeSkip.label': 'Großer Skip',
+    'setting.keyLargeSkip.desc': 'Taste für Intro-Skip',
+    'setting.defaultIntroSkip.label': 'Standard Intro-Skip, Sek',
+    'setting.defaultIntroSkip.desc': 'Standard-Intro-Skipgröße für neue Serien',
+    'setting.defaultOutroThresh.label': 'Standard Outro-Schwelle, Sek',
+    'setting.defaultOutroThresh.desc': 'Standard-Outro-Schwelle für neue Serien',
+    'setting.fastFwdSize.label': 'Schnellvorlauf, Sek',
+    'setting.fastFwdSize.desc': 'Sekunden beim Schnellvorlauf',
+    'setting.corsProxy.label': 'CORS-Proxy',
+    'setting.corsProxy.desc': 'URL des CORS-Proxy-Servers',
+    'setting.corsProxy.placeholder': 'https://...',
+    'setting.commlinkInterval.label': 'Commlink Intervall, ms',
+    'setting.commlinkInterval.desc': 'Polling-Intervall für iframe-Kommunikation',
     'save.btn': 'Speichern',
     'save.hint': '✓ Gespeichert',
+    'save.reset': 'Auf Standard zurücksetzen',
+    'save.resetDone': '✓ Zurückgesetzt',
   },
   en: {
     'status.loading': 'Loading...',
@@ -66,6 +120,7 @@ const TRANSLATIONS = {
     'tab.logs': '📋 Logs',
     'tab.aniskip': '⏭️ AniSkip',
     'tab.settings': '⚙️ Settings',
+    'tab.advanced': '🔧 Advanced',
     'logs.all': 'All',
     'logs.log': 'Log',
     'logs.warn': 'Warn',
@@ -84,8 +139,14 @@ const TRANSLATIONS = {
     'aniskip.noSkip': 'No AniSkip',
     'settings.language': 'Language / Sprache',
     'settings.playback': 'Playback',
+    'settings.skipSizes': 'Skip sizes',
     'settings.aniskipSuffix': '(Aniworld.to only)',
     'settings.localSkip': 'Local skip times',
+    'settings.behavior': 'Behavior',
+    'settings.timing': 'Timing',
+    'settings.hotkeys': 'Hotkeys',
+    'settings.defaults': 'Default values',
+    'settings.network': 'Network',
     'setting.language.label': 'Language',
     'setting.language.desc': 'User interface language',
     'setting.autoplay.label': 'Autoplay',
@@ -94,6 +155,18 @@ const TRANSLATIONS = {
     'setting.skipIntro.desc': 'Skip intro immediately when detected',
     'setting.playbackMem.label': 'Remember playback position',
     'setting.playbackMem.desc': 'Restore progress on reload',
+    'setting.mutedAutoplay.label': 'Muted autoplay',
+    'setting.mutedAutoplay.desc': 'Start autoplay muted if the browser blocks it',
+    'setting.autoSkipStart.label': 'Skip at start',
+    'setting.autoSkipStart.desc': 'Automatically skip at the beginning of each episode',
+    'setting.skipSecondsStart.label': 'Seconds at start',
+    'setting.skipSecondsStart.desc': 'Seconds to skip at the beginning',
+    'setting.introSkipSize.label': 'Intro skip size, sec',
+    'setting.introSkipSize.desc': 'Seconds skipped on manual intro skip',
+    'setting.outroThreshold.label': 'Outro threshold, sec',
+    'setting.outroThreshold.desc': 'Autoplay starts when fewer than these seconds remain',
+    'setting.showSkipBtn.label': 'Show skip intro button',
+    'setting.showSkipBtn.desc': 'Show button for manual intro skipping',
     'setting.useAniSkip.label': 'Use AniSkip API',
     'setting.useAniSkip.desc': 'Automatically fetch intro timestamps',
     'setting.notifications.label': 'Notifications',
@@ -109,8 +182,43 @@ const TRANSLATIONS = {
     'setting.skipEntries.deleted': n => `${n} deleted`,
     'setting.skipEntries.clearBtn': 'Delete all',
     'setting.cacheCleared': n => `${n} cleared!`,
+    'setting.playOnSkip.label': 'Play after skip',
+    'setting.playOnSkip.desc': 'Play video after intro is skipped',
+    'setting.highlightEpisodes.label': 'Highlight visited episodes',
+    'setting.highlightEpisodes.desc': 'Mark watched episodes with a color',
+    'setting.preloadProviders.label': 'Preload other providers',
+    'setting.preloadProviders.desc': 'Load alternative providers in the background',
+    'setting.skipBtnSeconds.label': 'Skip button display, sec',
+    'setting.skipBtnSeconds.desc': 'Seconds the skip button remains visible',
+    'setting.markWatched.label': 'Mark watched, sec',
+    'setting.markWatched.desc': 'Mark episode as watched after this many seconds (0 = off)',
+    'setting.positionExpiry.label': 'Position expiry, days',
+    'setting.positionExpiry.desc': 'Delete saved playback position after X days',
+    'setting.skipCooldown.label': 'Skip cooldown, ms',
+    'setting.skipCooldown.desc': 'Minimum time between two skips',
+    'setting.keyBackward.label': 'Fast backward',
+    'setting.keyBackward.desc': 'Key to rewind',
+    'setting.keyForward.label': 'Fast forward',
+    'setting.keyForward.desc': 'Key to fast forward',
+    'setting.keyFullscreen.label': 'Fullscreen',
+    'setting.keyFullscreen.desc': 'Key for fullscreen mode',
+    'setting.keyLargeSkip.label': 'Large skip',
+    'setting.keyLargeSkip.desc': 'Key for intro skip',
+    'setting.defaultIntroSkip.label': 'Default intro skip, sec',
+    'setting.defaultIntroSkip.desc': 'Default intro skip size for new series',
+    'setting.defaultOutroThresh.label': 'Default outro threshold, sec',
+    'setting.defaultOutroThresh.desc': 'Default outro threshold for new series',
+    'setting.fastFwdSize.label': 'Fast forward size, sec',
+    'setting.fastFwdSize.desc': 'Seconds per fast forward',
+    'setting.corsProxy.label': 'CORS proxy',
+    'setting.corsProxy.desc': 'URL of the CORS proxy server',
+    'setting.corsProxy.placeholder': 'https://...',
+    'setting.commlinkInterval.label': 'Commlink interval, ms',
+    'setting.commlinkInterval.desc': 'Polling interval for iframe communication',
     'save.btn': 'Save',
     'save.hint': '✓ Saved',
+    'save.reset': 'Reset to defaults',
+    'save.resetDone': '✓ Reset',
   },
 };
 
@@ -168,18 +276,56 @@ chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
 
 // ── Settings ──────────────────────────────────────────────────────────────────
 const NESTED_SETTINGS = [
-  { elId: 's-autoplay',      storeKey: 'coreSettings',     prop: 'isAutoplayEnabled',       default: true  },
-  { elId: 's-autoSkipIntro', storeKey: 'coreSettings',     prop: 'autoSkipIntro',            default: true  },
-  { elId: 's-playbackMem',   storeKey: 'mainSettings',     prop: 'playbackPositionMemory',   default: true  },
-  { elId: 's-useAniSkip',    storeKey: 'advancedSettings', prop: 'useAniSkip',               default: true  },
-  { elId: 's-notifications', storeKey: 'advancedSettings', prop: 'showAniSkipNotifications', default: true  },
+  // coreSettings
+  { elId: 's-autoplay',           storeKey: 'coreSettings',     prop: 'isAutoplayEnabled',              default: true  },
+  { elId: 's-autoSkipIntro',      storeKey: 'coreSettings',     prop: 'autoSkipIntro',                  default: true  },
+  { elId: 's-autoSkipStart',      storeKey: 'coreSettings',     prop: 'shouldAutoSkipOnStart',          default: true  },
+  { elId: 's-skipSecondsStart',   storeKey: 'coreSettings',     prop: 'autoSkipSecondsOnStart',         default: 0     },
+  { elId: 's-introSkipSize',      storeKey: 'coreSettings',     prop: 'currentLargeSkipSizeS',          default: 87    },
+  { elId: 's-outroThreshold',     storeKey: 'coreSettings',     prop: 'currentOutroSkipThresholdS',     default: 90    },
+  // mainSettings
+  { elId: 's-playbackMem',        storeKey: 'mainSettings',     prop: 'playbackPositionMemory',         default: true  },
+  { elId: 's-mutedAutoplay',      storeKey: 'mainSettings',     prop: 'shouldAutoplayMuted',            default: true  },
+  { elId: 's-highlightEpisodes',  storeKey: 'mainSettings',     prop: 'highlightVisitedEpisodes',       default: true  },
+  // advancedSettings
+  { elId: 's-useAniSkip',         storeKey: 'advancedSettings', prop: 'useAniSkip',                     default: true  },
+  { elId: 's-notifications',      storeKey: 'advancedSettings', prop: 'showAniSkipNotifications',       default: true  },
+  { elId: 's-showSkipBtn',        storeKey: 'advancedSettings', prop: 'showSkipIntroButton',            default: true  },
+  { elId: 's-playOnSkip',         storeKey: 'advancedSettings', prop: 'playOnLargeSkip',                default: true  },
+  { elId: 's-preloadProviders',   storeKey: 'advancedSettings', prop: 'preloadOtherProviders',          default: true  },
+  { elId: 's-skipBtnSeconds',     storeKey: 'advancedSettings', prop: 'showSkipIntroButtonSeconds',     default: 240   },
+  { elId: 's-markWatched',        storeKey: 'advancedSettings', prop: 'markWatchedAfterS',              default: 0     },
+  { elId: 's-positionExpiry',     storeKey: 'advancedSettings', prop: 'playbackPositionExpirationDays', default: 30    },
+  { elId: 's-skipCooldown',       storeKey: 'advancedSettings', prop: 'largeSkipCooldownMs',            default: 300   },
+  { elId: 's-defaultIntroSkip',   storeKey: 'advancedSettings', prop: 'defaultLargeSkipSizeS',          default: 87    },
+  { elId: 's-defaultOutroThresh', storeKey: 'advancedSettings', prop: 'defaultOutroSkipThresholdS',     default: 90    },
+  { elId: 's-fastFwdSize',        storeKey: 'advancedSettings', prop: 'fastForwardSizeS',               default: 10    },
+  { elId: 's-corsProxy',          storeKey: 'advancedSettings', prop: 'corsProxy',                      default: 'https://aniworld-to-cors-proxy.fly.dev/' },
+  { elId: 's-commlinkInterval',   storeKey: 'advancedSettings', prop: 'commlinkPollingIntervalMs',      default: 40    },
+  // hotkeysSettings
+  { elId: 's-keyBackward',        storeKey: 'hotkeysSettings',  prop: 'fastBackward',                   default: 'left'  },
+  { elId: 's-keyForward',         storeKey: 'hotkeysSettings',  prop: 'fastForward',                    default: 'right' },
+  { elId: 's-keyFullscreen',      storeKey: 'hotkeysSettings',  prop: 'fullscreen',                     default: 'f'     },
+  { elId: 's-keyLargeSkip',       storeKey: 'hotkeysSettings',  prop: 'largeSkip',                      default: 'v'     },
 ];
 
 const FLAT_SETTINGS = [
-  { elId: 's-language',          storageKey: 'popup_language',              default: 'de' },
-  { elId: 's-animeSkipClientId', storageKey: 'animeSkipClientId',           default: ''   },
-  { elId: 's-skipTimesLimit',    storageKey: 'aw_local_skiptimes_limit',    default: 500  },
+  { elId: 's-language',          storageKey: 'popup_language',           default: 'de'  },
+  { elId: 's-animeSkipClientId', storageKey: 'animeSkipClientId',        default: ''    },
+  { elId: 's-skipTimesLimit',    storageKey: 'aw_local_skiptimes_limit', default: 500   },
 ];
+
+function applyToEl(el, val) {
+  if (el.type === 'checkbox') el.checked = !!val;
+  else if (el.type === 'number') el.value = Number(val);
+  else el.value = val != null ? String(val) : '';
+}
+
+function readFromEl(el) {
+  if (el.type === 'checkbox') return el.checked;
+  if (el.type === 'number') return Number(el.value);
+  return el.value.trim();
+}
 
 async function loadSettings() {
   const storeKeys = [...new Set(NESTED_SETTINGS.map(s => s.storeKey)), ...FLAT_SETTINGS.map(s => s.storageKey)];
@@ -191,14 +337,14 @@ async function loadSettings() {
     let storeObj = {};
     try { storeObj = JSON.parse(data[storeKey]) || {}; } catch (_) {}
     const val = prop in storeObj ? storeObj[prop] : def;
-    el.checked = !!val;
+    applyToEl(el, val);
   }
 
   for (const { elId, storageKey, default: def } of FLAT_SETTINGS) {
     const el = document.getElementById(elId);
     if (!el) continue;
     const val = data[storageKey] !== undefined ? data[storageKey] : def;
-    el.value = el.type === 'number' ? Number(val) : (val || '');
+    applyToEl(el, val);
   }
 
   const allKeys = await chrome.storage.local.get(null);
@@ -207,7 +353,7 @@ async function loadSettings() {
   if (countEl) countEl.textContent = t('setting.skipEntries.count', count);
 }
 
-document.getElementById('saveSettings').addEventListener('click', async () => {
+async function doSaveSettings() {
   const storeKeys = [...new Set(NESTED_SETTINGS.map(s => s.storeKey))];
   const data = await chrome.storage.local.get(storeKeys);
 
@@ -218,7 +364,7 @@ document.getElementById('saveSettings').addEventListener('click', async () => {
     if (!toSave[storeKey]) {
       try { toSave[storeKey] = JSON.parse(data[storeKey]) || {}; } catch (_) { toSave[storeKey] = {}; }
     }
-    toSave[storeKey][prop] = el.checked;
+    toSave[storeKey][prop] = readFromEl(el);
   }
   for (const key of Object.keys(toSave)) {
     toSave[key] = JSON.stringify(toSave[key]);
@@ -227,14 +373,45 @@ document.getElementById('saveSettings').addEventListener('click', async () => {
   for (const { elId, storageKey } of FLAT_SETTINGS) {
     const el = document.getElementById(elId);
     if (!el) continue;
-    toSave[storageKey] = el.type === 'number' ? Number(el.value) : el.value.trim();
+    toSave[storageKey] = readFromEl(el);
   }
 
   await chrome.storage.local.set(toSave);
+}
 
-  const hint = document.getElementById('saveHint');
+function showHint(hintId, textKey) {
+  const hint = document.getElementById(hintId);
+  if (!hint) return;
+  hint.textContent = t(textKey);
   hint.classList.remove('hidden');
   setTimeout(() => hint.classList.add('hidden'), 2000);
+}
+
+document.getElementById('saveSettings').addEventListener('click', async () => {
+  await doSaveSettings();
+  showHint('saveHint', 'save.hint');
+});
+
+document.getElementById('saveSettingsAdv').addEventListener('click', async () => {
+  await doSaveSettings();
+  showHint('saveHintAdv', 'save.hint');
+});
+
+document.getElementById('resetSettings').addEventListener('click', async () => {
+  for (const { elId, default: def } of NESTED_SETTINGS) {
+    const el = document.getElementById(elId);
+    if (el) applyToEl(el, def);
+  }
+  for (const { elId, default: def } of FLAT_SETTINGS) {
+    const el = document.getElementById(elId);
+    if (el) applyToEl(el, def);
+  }
+  await doSaveSettings();
+  showHint('saveHintAdv', 'save.resetDone');
+  const allKeys = await chrome.storage.local.get(null);
+  const count = Object.keys(allKeys).filter(k => k.startsWith('aw_local_skiptimes::')).length;
+  const countEl = document.getElementById('skipTimesCount');
+  if (countEl) countEl.textContent = t('setting.skipEntries.count', count);
 });
 
 // Language changes apply immediately without needing to click Save

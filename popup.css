@@ -239,6 +239,28 @@ body {
 .setting-input:focus { border-color: #ff336660; }
 .setting-input::placeholder { color: #444458; }
 
+/* Hotkey key input */
+.setting-input-key {
+  width: 72px;
+  text-align: center;
+  font-family: 'Consolas', 'Cascadia Code', monospace;
+  font-size: 13px;
+  letter-spacing: 0.05em;
+}
+
+/* Scrollable settings panels */
+#panel-settings,
+#panel-advanced {
+  max-height: 480px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #ffffff20 transparent;
+}
+#panel-settings::-webkit-scrollbar,
+#panel-advanced::-webkit-scrollbar { width: 4px; }
+#panel-settings::-webkit-scrollbar-thumb,
+#panel-advanced::-webkit-scrollbar-thumb { background: #ffffff20; border-radius: 2px; }
+
 /* Buttons */
 .btn-primary {
   width: 100%;
@@ -255,6 +277,11 @@ body {
 }
 .btn-primary:hover { opacity: 0.85; }
 .btn-primary:active { opacity: 0.7; }
+
+.btn-danger {
+  background: linear-gradient(135deg, #6b7280, #374151);
+}
+.btn-danger:hover { opacity: 0.85; }
 
 .save-hint {
   text-align: center;
