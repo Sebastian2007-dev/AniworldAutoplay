@@ -1,4 +1,46 @@
 // Background Service Worker
+
+// ── Ad-popup tab blocker ───────────────────────────────────────────────────────
+// Video players (VOE etc.) call window.open() to open ad tabs when the user
+// clicks inside them.  If a new tab is opened from an aniworld/s.to tab and
+// its destination is NOT aniworld/s.to itself, it is an ad — close it.
+const PLAYER_ORIGIN_RE = /^https?:\/\/(aniworld\.to|s\.to|serienstream\.to)(\/|$)/i;
+
+chrome.tabs.onCreated.addListener(tab => {
+  if (!tab.openerTabId) return;
+
+  chrome.tabs.get(tab.openerTabId, opener => {
+    if (chrome.runtime.lastError) return;
+    if (!PLAYER_ORIGIN_RE.test(opener.url || '')) return;
+
+    // Opener is an aniworld/s.to tab — check the new tab's destination.
+    function closeIfAd(url) {
+      if (!url || url.startsWith('chrome:') || url.startsWith('about:') || url === '') return;
+      if (PLAYER_ORIGIN_RE.test(url)) return; // legit navigation on the same site
+      chrome.tabs.remove(tab.id, () => { chrome.runtime.lastError; /* suppress */ });
+      console.log('[AdTabBlocker] Closed ad tab:', url);
+    }
+
+    const immediateUrl = tab.pendingUrl || tab.url || '';
+    if (immediateUrl) {
+      closeIfAd(immediateUrl);
+      return;
+    }
+
+    // URL not known yet — watch for the first navigation update
+    function listener(tabId, changeInfo) {
+      if (tabId !== tab.id) return;
+      const url = changeInfo.url || '';
+      if (!url) return;
+      chrome.tabs.onUpdated.removeListener(listener);
+      closeIfAd(url);
+    }
+    chrome.tabs.onUpdated.addListener(listener);
+  });
+});
+// ──────────────────────────────────────────────────────────────────────────────
+
+
 // Handles cross-origin fetch requests on behalf of content scripts,
 // since content scripts are subject to CORS restrictions but the
 // background worker is not (given host_permissions in manifest.json).

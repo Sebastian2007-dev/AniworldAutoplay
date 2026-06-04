@@ -306,6 +306,50 @@
     }());
 
     // ============================================================
+    // Click-Ad Blocker — prevents video players (VOE, Doodstream,
+    // etc.) from opening ad tabs when the user clicks inside them.
+    // Runs in every frame (top page + all iframes).
+    // ============================================================
+    (function installClickAdBlocker() {
+        // Inject into page context (content scripts run in isolated world
+        // and cannot override window.open for the page's own JS).
+        const s = document.createElement('script');
+        s.textContent = `(function(){
+            try {
+                var _open = window.open;
+                window.open = function(url, target, features) {
+                    var t = (target || '').trim();
+                    // Block all new-tab/popup opens — these are always ads in video players
+                    if (!t || t === '_blank' || t === '_top' || t === '_parent') {
+                        console.log('[ClickAdBlocker] Blocked popup:', url);
+                        return { closed: true, close: function(){}, focus: function(){}, blur: function(){} };
+                    }
+                    return _open.apply(this, arguments);
+                };
+            } catch (e) {}
+            // Also block <a target="_blank/_top/_parent"> clicks that bypass window.open
+            document.addEventListener('click', function(e) {
+                try {
+                    var a = e.target && e.target.closest && e.target.closest('a[target]');
+                    if (!a) return;
+                    var t = (a.target || '').trim();
+                    if (t !== '_blank' && t !== '_top' && t !== '_parent') return;
+                    var href = a.href || '';
+                    // Allow legitimate aniworld/s.to same-site links
+                    if (/^https?:\\/\\/(aniworld\\.to|s\\.to|serienstream\\.to)([\\/\\?#]|$)/.test(href)) return;
+                    e.preventDefault();
+                    e.stopImmediatePropagation();
+                    console.log('[ClickAdBlocker] Blocked link:', href);
+                } catch (e) {}
+            }, true);
+        })();`;
+        try {
+            (document.head || document.documentElement).appendChild(s);
+            s.remove();
+        } catch (e) {}
+    }());
+
+    // ============================================================
     // AniSkip Integration Module
     // ============================================================
     const AniSkipModule = {
@@ -2794,6 +2838,10 @@ const DEFAULT_SETTINGS_LAYOUT = {
             }
 
             const episodeLength = player.duration ? Math.floor(player.duration) : 0;
+            if (episodeLength <= 0) {
+                Notiflix.Notify.failure(i18n.submitError, { timeout: 4000, position: 'right-bottom' });
+                return;
+            }
 
             console.log('[Submit Button] Submitting:', {
                 malId,
@@ -3955,6 +4003,14 @@ const DEFAULT_SETTINGS_LAYOUT = {
                 const times = readFields();
                 if (!times) return;
                 const episodeLength = player.duration ? Math.floor(player.duration) : 0;
+                if (episodeLength <= 0) {
+                    Notiflix.Notify.failure(
+                        userLang === 'de'
+                            ? 'Episodenlänge nicht verfügbar. Bitte warte bis das Video geladen ist.'
+                            : 'Episode length not available. Please wait for the video to load.',
+                        { timeout: 4000, position: 'right-bottom' });
+                    return;
+                }
 
                 let resolvedMalId = malId;
                 if (!resolvedMalId) {
