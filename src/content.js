@@ -312,37 +312,11 @@
     // ============================================================
     (function installClickAdBlocker() {
         // Inject into page context (content scripts run in isolated world
-        // and cannot override window.open for the page's own JS).
+        // and cannot override window.open for the page's own JS). Loaded as
+        // an external file via chrome.runtime.getURL() to bypass page CSP
+        // (no unsafe-inline needed - same approach as vidmoly-patch.js).
         const s = document.createElement('script');
-        s.textContent = `(function(){
-            try {
-                var _open = window.open;
-                window.open = function(url, target, features) {
-                    var t = (target || '').trim();
-                    // Block all new-tab/popup opens — these are always ads in video players
-                    if (!t || t === '_blank' || t === '_top' || t === '_parent') {
-                        console.log('[ClickAdBlocker] Blocked popup:', url);
-                        return { closed: true, close: function(){}, focus: function(){}, blur: function(){} };
-                    }
-                    return _open.apply(this, arguments);
-                };
-            } catch (e) {}
-            // Also block <a target="_blank/_top/_parent"> clicks that bypass window.open
-            document.addEventListener('click', function(e) {
-                try {
-                    var a = e.target && e.target.closest && e.target.closest('a[target]');
-                    if (!a) return;
-                    var t = (a.target || '').trim();
-                    if (t !== '_blank' && t !== '_top' && t !== '_parent') return;
-                    var href = a.href || '';
-                    // Allow legitimate aniworld/s.to same-site links
-                    if (/^https?:\\/\\/(aniworld\\.to|s\\.to|serienstream\\.to)([\\/\\?#]|$)/.test(href)) return;
-                    e.preventDefault();
-                    e.stopImmediatePropagation();
-                    console.log('[ClickAdBlocker] Blocked link:', href);
-                } catch (e) {}
-            }, true);
-        })();`;
+        s.src = chrome.runtime.getURL('src/click-ad-blocker-patch.js');
         try {
             (document.head || document.documentElement).appendChild(s);
             s.remove();
@@ -1719,6 +1693,12 @@ const DEFAULT_SETTINGS_LAYOUT = {
         fastForward: 'fastForward',
         fullscreen: 'fullscreen',
         largeSkip: 'largeSkip',
+        playPause: 'playPause',
+        editIntro: 'editIntro',
+        editOutro: 'editOutro',
+        pip: 'pip',
+        skip10Back: 'skip10Back',
+        skip10Forward: 'skip10Forward',
     };
     // Note that defaults are applied only on a very first run of the script
     const HOTKEYS_SETTINGS_DEFAULTS = {
@@ -1726,6 +1706,12 @@ const DEFAULT_SETTINGS_LAYOUT = {
         [HOTKEYS_SETTINGS_MAP.fastForward]: 'right',
         [HOTKEYS_SETTINGS_MAP.fullscreen]: 'f',
         [HOTKEYS_SETTINGS_MAP.largeSkip]: 'v',
+        [HOTKEYS_SETTINGS_MAP.playPause]: 'space',
+        [HOTKEYS_SETTINGS_MAP.editIntro]: 'i',
+        [HOTKEYS_SETTINGS_MAP.editOutro]: 'o',
+        [HOTKEYS_SETTINGS_MAP.pip]: 'p',
+        [HOTKEYS_SETTINGS_MAP.skip10Back]: 'j',
+        [HOTKEYS_SETTINGS_MAP.skip10Forward]: 'l',
     };
     const MAIN_SETTINGS_MAP = {
         highlightVisitedEpisodes: 'highlightVisitedEpisodes',
@@ -2371,6 +2357,38 @@ const DEFAULT_SETTINGS_LAYOUT = {
         return new Promise(r => setTimeout(r, ms));
     }
 
+    // Maps the simple hotkey names used in settings (e.g. "left", "space")
+    // to the value reported by KeyboardEvent.key
+    const HOTKEY_NAME_TO_EVENT_KEY = {
+        left: 'arrowleft',
+        right: 'arrowright',
+        up: 'arrowup',
+        down: 'arrowdown',
+        space: ' ',
+        spacebar: ' ',
+        esc: 'escape',
+    };
+
+    function eventMatchesHotkey(event, hotkeyName) {
+        if (!hotkeyName) return false;
+        const normalized = String(hotkeyName).trim().toLowerCase();
+        if (!normalized) return false;
+
+        const expectedKey = HOTKEY_NAME_TO_EVENT_KEY[normalized] || normalized;
+        return event.key.toLowerCase() === expectedKey;
+    }
+
+    function isEditableHotkeyTarget(el) {
+        return !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable);
+    }
+
+    // Settings added after the initial release aren't in existing users'
+    // stored hotkeysSettings object yet (defaults are only applied on a
+    // script's very first run), so fall back to the hardcoded default.
+    function resolveHotkeySetting(key) {
+        return hotkeysSettings[key] ?? HOTKEYS_SETTINGS_DEFAULTS[key];
+    }
+
     // Create "Skip intro" button
     function setupSkipIntroButton(player) {
         const SKIP_BTN_STYLE = `
@@ -2965,58 +2983,8 @@ const DEFAULT_SETTINGS_LAYOUT = {
             await player.requestPictureInPicture();
             console.log('[PiP] Restored successfully on attempt 2');
         } catch (e) {
-            console.warn(`[PiP] Attempt 2 failed (${e.message}) — user gesture required, showing button`);
-            showPipRestoreButton(player);
+            console.warn(`[PiP] Attempt 2 failed (${e.message}) — user gesture required, use the PiP hotkey to restore manually`);
         }
-    }
-
-    function showPipRestoreButton(player) {
-        if (document.querySelector('.aw-pip-restore-btn')) return;
-
-        console.log('[PiP] Showing restore button (waiting for user gesture)');
-
-        GM_addStyle(`
-            .aw-pip-restore-btn {
-                position: fixed;
-                bottom: 110px;
-                right: 10px;
-                padding: 8px 14px;
-                background: rgba(0,0,0,0.75);
-                color: #fff;
-                border: 2px solid #60a5fa;
-                border-radius: 6px;
-                font-size: 13px;
-                font-weight: 600;
-                font-family: sans-serif;
-                cursor: pointer;
-                z-index: 99999;
-                transition: background 0.15s;
-            }
-            .aw-pip-restore-btn:hover { background: rgba(30,80,160,0.85); }
-        `);
-
-        const btn = document.createElement('button');
-        btn.className = 'aw-pip-restore-btn';
-        btn.textContent = '⧉ PiP wiederherstellen';
-        btn.addEventListener('click', async () => {
-            btn.remove();
-            console.log('[PiP] User clicked restore button');
-            try {
-                await player.requestPictureInPicture();
-                console.log('[PiP] Restored via user gesture');
-            } catch (e) {
-                console.warn(`[PiP] Failed even with user gesture: ${e.message}`);
-            }
-        }, { once: true });
-
-        document.body.appendChild(btn);
-
-        setTimeout(() => {
-            if (btn.isConnected) {
-                btn.remove();
-                console.log('[PiP] Restore button auto-dismissed after timeout');
-            }
-        }, 10000);
     }
 
     // Add visual markers on timeline for intro/outro
@@ -3409,23 +3377,46 @@ const DEFAULT_SETTINGS_LAYOUT = {
         }
 
         async initCrossFrameConnection() {
-            const iframeId = makeId();
-            const topScopeIdPromise = new Promise((resolve) => {
-                // Top scope using GM_setValue will write its own id using iframeId as a key
-                const valueChangeListenerId = GM_addValueChangeListener(iframeId, (
-                    _key,
-                    _oldValue,
-                    newValue,
-                ) => {
-                    GM_removeValueChangeListener(valueChangeListenerId);
-                    GM_deleteValue(iframeId);
+            // The top scope only listens for 'unboundIframeId' changes for a
+            // limited window. Hoster redirect chains (e.g. VOE now bounces
+            // through an extra domain) can delay this page past that window,
+            // so retry with a fresh id - each GM_setValue is a new storage
+            // change that a freshly (re)registered top-scope listener will catch.
+            const ATTEMPT_TIMEOUT_MS = 3000;
+            const MAX_ATTEMPTS = 10;
 
-                    resolve(newValue);
-                });
-            });
-            // This should be almost immediately picked up by a top scope
-            GM_setValue('unboundIframeId', iframeId);
-            const topScopeId = await topScopeIdPromise;
+            let iframeId, topScopeId;
+            for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+                iframeId = makeId();
+
+                try {
+                    topScopeId = await new Promise((resolve, reject) => {
+                        const valueChangeListenerId = GM_addValueChangeListener(iframeId, (
+                            _key,
+                            _oldValue,
+                            newValue,
+                        ) => {
+                            clearTimeout(timeoutId);
+                            GM_removeValueChangeListener(valueChangeListenerId);
+                            GM_deleteValue(iframeId);
+
+                            resolve(newValue);
+                        });
+
+                        const timeoutId = setTimeout(() => {
+                            GM_removeValueChangeListener(valueChangeListenerId);
+                            reject(new Error('No response from top scope'));
+                        }, ATTEMPT_TIMEOUT_MS);
+
+                        GM_setValue('unboundIframeId', iframeId);
+                    });
+                    console.log(`[Autoplay] Iframe handshake attempt ${attempt}/${MAX_ATTEMPTS} succeeded`);
+                    break;
+                } catch (e) {
+                    console.warn(`[Autoplay] Iframe handshake attempt ${attempt}/${MAX_ATTEMPTS} failed:`, e.message);
+                    if (attempt === MAX_ATTEMPTS) throw new Error('Top scope connection timeout');
+                }
+            }
 
             if (!iframeId || !topScopeId) throw new Error('Something went wrong');
 
@@ -3581,6 +3572,13 @@ const DEFAULT_SETTINGS_LAYOUT = {
                             this.updateFullscreenBtn({
                                 isInFullscreen: this.isInFullscreen
                             });
+                            break;
+                        }
+
+                        // Hotkey was pressed on the top page (outside this iframe) -
+                        // see TopScopeInterface.setupGlobalHotkeys
+                        case TopScopeInterface.messages.TRIGGER_HOTKEY_ACTION: {
+                            this.runHotkeyAction(packet.data.actionKey, { repeat: !!packet.data.repeat });
                             break;
                         }
 
@@ -4413,80 +4411,134 @@ const DEFAULT_SETTINGS_LAYOUT = {
             });
         }
 
+        // Requests fullscreen on the top page (so overlays like the provider
+        // switcher stay reachable). The top page handles its own fallback if
+        // the real Fullscreen API denies the request - see
+        // TopScopeInterface.toggleRealOrFakeFullscreen.
+        toggleFullscreen() {
+            this.messenger.sendMessage(IframeMessenger.messages.TOGGLE_FULLSCREEN);
+        }
+
+        // Runs the action for a hotkey by its HOTKEYS_SETTINGS_MAP name, regardless
+        // of whether it was pressed directly in this iframe or relayed here from
+        // the top page (see TopScopeInterface.setupGlobalHotkeys) - that's why
+        // actions are looked up by name instead of being bound inline to a key.
+        runHotkeyAction(actionKey, ev = { repeat: false }) {
+            this.hotkeyHandlers?.[actionKey]?.(ev);
+        }
+
         setupHotkeys(player) {
-            keyboardJS.bind('space', () => player.paused ? player.play() : player.pause());
-            if (hotkeysSettings[HOTKEYS_SETTINGS_MAP.fastForward]) {
-                keyboardJS.bind(hotkeysSettings[HOTKEYS_SETTINGS_MAP.fastForward], () => {
+            const largeSkipCooldownMs = advancedSettings[ADVANCED_SETTINGS_MAP.largeSkipCooldownMs];
+            let lastLargeSkipTime = 0;
+
+            this.hotkeyHandlers = {
+                [HOTKEYS_SETTINGS_MAP.playPause]: (ev) => {
+                    if (ev.repeat) return;
+                    player.paused ? player.play() : player.pause();
+                },
+                [HOTKEYS_SETTINGS_MAP.pip]: (ev) => {
+                    if (ev.repeat) return;
+                    if (!document.pictureInPictureEnabled) return;
+
+                    const action = document.pictureInPictureElement
+                        ? document.exitPictureInPicture()
+                        : player.requestPictureInPicture();
+                    action.catch(e => console.warn('[PiP] Toggle failed:', e.message));
+                },
+                [HOTKEYS_SETTINGS_MAP.editIntro]: (ev) => {
+                    if (ev.repeat) return;
+                    if (document.getElementById('aw-submit-dialog')) return;
+
+                    this._openSkipTimesDialog(null, this.episodeNumber, null, !!globalAniSkipData?.intro, 'intro');
+                },
+                [HOTKEYS_SETTINGS_MAP.editOutro]: (ev) => {
+                    if (ev.repeat) return;
+                    if (document.getElementById('aw-submit-dialog')) return;
+
+                    this._openSkipTimesDialog(null, this.episodeNumber, null, !!globalAniSkipData?.outro, 'outro');
+                },
+                [HOTKEYS_SETTINGS_MAP.fastForward]: () => {
                     if (advancedSettings[ADVANCED_SETTINGS_MAP.fastForwardSizeS]) {
                         player.currentTime += advancedSettings[ADVANCED_SETTINGS_MAP.fastForwardSizeS];
                     }
-                });
-            }
-
-            if (hotkeysSettings[HOTKEYS_SETTINGS_MAP.fastBackward]) {
-                keyboardJS.bind(hotkeysSettings[HOTKEYS_SETTINGS_MAP.fastBackward], () => {
+                },
+                [HOTKEYS_SETTINGS_MAP.fastBackward]: () => {
                     if (advancedSettings[ADVANCED_SETTINGS_MAP.fastForwardSizeS]) {
                         player.currentTime -= advancedSettings[ADVANCED_SETTINGS_MAP.fastForwardSizeS];
                     }
-                });
-            }
+                },
+                // Fixed 10s jump, independent of the configurable fast-forward size above.
+                [HOTKEYS_SETTINGS_MAP.skip10Back]: () => {
+                    player.currentTime -= 10;
+                },
+                [HOTKEYS_SETTINGS_MAP.skip10Forward]: () => {
+                    player.currentTime += 10;
+                },
+                [HOTKEYS_SETTINGS_MAP.fullscreen]: (ev) => {
+                    if (ev.repeat) return;
+                    this.toggleFullscreen();
+                },
+                [HOTKEYS_SETTINGS_MAP.largeSkip]: () => {
+                    if (!coreSettings[CORE_SETTINGS_MAP.currentLargeSkipSizeS]) return;
 
-            if (hotkeysSettings[HOTKEYS_SETTINGS_MAP.fullscreen]) {
-                keyboardJS.bind(hotkeysSettings[HOTKEYS_SETTINGS_MAP.fullscreen], (ev) => {
-                    ev.preventRepeat();
-                    this.messenger.sendMessage(IframeMessenger.messages.TOGGLE_FULLSCREEN);
-                });
-            }
+                    const now = Date.now();
+                    if (now - lastLargeSkipTime < largeSkipCooldownMs) return;
+                    lastLargeSkipTime = now;
 
-            if (hotkeysSettings[HOTKEYS_SETTINGS_MAP.largeSkip]) {
-                const cooldownTime = advancedSettings[ADVANCED_SETTINGS_MAP.largeSkipCooldownMs];
-                let lastSkipTime = 0;
+                    console.log('[Keyboard Skip] Pressed. globalAniSkipData:', globalAniSkipData);
 
-                keyboardJS.bind(hotkeysSettings[HOTKEYS_SETTINGS_MAP.largeSkip], () => {
-                    if (coreSettings[CORE_SETTINGS_MAP.currentLargeSkipSizeS]) {
-                        const now = Date.now();
-
-                        if (now - lastSkipTime < cooldownTime) return;
-
-                        lastSkipTime = now;
-
-                        console.log('[Keyboard Skip] Pressed. globalAniSkipData:', globalAniSkipData);
-
-                        // Check if we have AniSkip data for intro
-                        if (globalAniSkipData && globalAniSkipData.intro) {
-                            // Use AniSkip intro end time
-                            console.log('[Keyboard Skip] Using AniSkip time:', globalAniSkipData.intro.end);
-                            player.currentTime = globalAniSkipData.intro.end;
-                            if (advancedSettings[ADVANCED_SETTINGS_MAP.showAniSkipNotifications]) {
-                                Notiflix.Notify.success(i18n.aniSkipIntroDetected, {
-                                    timeout: 1500,
-                                    position: 'right-bottom'
-                                });
-                            }
-                        } else {
-                            // Fallback to manual skip size
-                            console.log('[Keyboard Skip] Using fallback skip size:', coreSettings[CORE_SETTINGS_MAP.currentLargeSkipSizeS]);
-                            player.currentTime += coreSettings[CORE_SETTINGS_MAP.currentLargeSkipSizeS];
-                            if (globalAniSkipData === null && advancedSettings[ADVANCED_SETTINGS_MAP.useAniSkip] && advancedSettings[ADVANCED_SETTINGS_MAP.showAniSkipNotifications]) {
-                                Notiflix.Notify.info(i18n.usingFallbackTimes, {
-                                    timeout: 1500,
-                                    position: 'right-bottom'
-                                });
-                            }
+                    // Only treat this as "skip the intro" while still inside/before
+                    // it - otherwise we'd yank playback backward to the intro's end
+                    // every time this key is pressed later in the episode.
+                    const introEnd = globalAniSkipData?.intro?.end ?? null;
+                    if (introEnd !== null && player.currentTime < introEnd) {
+                        console.log('[Keyboard Skip] Using AniSkip time:', introEnd);
+                        player.currentTime = introEnd;
+                        if (advancedSettings[ADVANCED_SETTINGS_MAP.showAniSkipNotifications]) {
+                            Notiflix.Notify.success(i18n.aniSkipIntroDetected, {
+                                timeout: 1500,
+                                position: 'right-bottom'
+                            });
                         }
-
-                        const skipBtn = document.querySelector('.SkipIntroBtn');
-                        if (skipBtn) {
-                            skipBtn.classList.add('invisible');
-                            window.__skipIntroButtonDisabled = true;
-                        }
-
-                        if (advancedSettings[ADVANCED_SETTINGS_MAP.playOnLargeSkip]) {
-                            player.play();
+                    } else {
+                        console.log('[Keyboard Skip] Using fallback skip size:', coreSettings[CORE_SETTINGS_MAP.currentLargeSkipSizeS]);
+                        player.currentTime += coreSettings[CORE_SETTINGS_MAP.currentLargeSkipSizeS];
+                        if (globalAniSkipData === null && advancedSettings[ADVANCED_SETTINGS_MAP.useAniSkip] && advancedSettings[ADVANCED_SETTINGS_MAP.showAniSkipNotifications]) {
+                            Notiflix.Notify.info(i18n.usingFallbackTimes, {
+                                timeout: 1500,
+                                position: 'right-bottom'
+                            });
                         }
                     }
-                });
-            }
+
+                    const skipBtn = document.querySelector('.SkipIntroBtn');
+                    if (skipBtn) {
+                        skipBtn.classList.add('invisible');
+                        window.__skipIntroButtonDisabled = true;
+                    }
+
+                    if (advancedSettings[ADVANCED_SETTINGS_MAP.playOnLargeSkip]) {
+                        player.play();
+                    }
+                },
+            };
+
+            // Listen on the capture phase so this fires before the player's own
+            // built-in hotkeys (e.g. video.js/JW Player's native "f" for
+            // fullscreen), which would otherwise call stopPropagation() and
+            // swallow the key before it ever reaches a bubble-phase listener.
+            document.addEventListener('keydown', (ev) => {
+                if (isEditableHotkeyTarget(ev.target)) return;
+
+                for (const actionKey of Object.keys(this.hotkeyHandlers)) {
+                    if (!eventMatchesHotkey(ev, resolveHotkeySetting(actionKey))) continue;
+
+                    ev.preventDefault();
+                    ev.stopPropagation();
+                    this.runHotkeyAction(actionKey, ev);
+                    return;
+                }
+            }, true);
         }
 
         setupOutroSkipHandling(player) {
@@ -4717,6 +4769,9 @@ const DEFAULT_SETTINGS_LAYOUT = {
             this.setupAutoIntroSkip(player);
             this.setupAutoEdSkip(player);
             this.setupWatchedStateLabeling(player);
+            // Lets the browser PiP the video itself when the tab is hidden/minimized -
+            // no user gesture needed since the browser (not our script) triggers it.
+            player.autoPictureInPicture = true;
             this.setupVideoPlaybackPositionMemory(player);
             this.restylePlayer(player);
 
@@ -4752,9 +4807,7 @@ const DEFAULT_SETTINGS_LAYOUT = {
                 IS_SAFARI ? fsBtn.remove() : fsBtn.replaceWith(newFsBtn);
 
                 if (IS_SAFARI === false) {
-                    newFsBtn.addEventListener('click', () => {
-                        this.messenger.sendMessage(IframeMessenger.messages.TOGGLE_FULLSCREEN);
-                    });
+                    newFsBtn.addEventListener('click', () => this.toggleFullscreen());
                     this.messenger.sendMessage(IframeMessenger.messages.REQUEST_FULLSCREEN_STATE);
                 }
             });
@@ -5034,6 +5087,9 @@ const DEFAULT_SETTINGS_LAYOUT = {
             this.setupAutoIntroSkip(player);
             this.setupAutoEdSkip(player);
             this.setupWatchedStateLabeling(player);
+            // Lets the browser PiP the video itself when the tab is hidden/minimized -
+            // no user gesture needed since the browser (not our script) triggers it.
+            player.autoPictureInPicture = true;
             this.setupVideoPlaybackPositionMemory(player);
 
             let hasSkippedInitial = false;
@@ -5070,9 +5126,7 @@ const DEFAULT_SETTINGS_LAYOUT = {
                 IS_SAFARI ? fsBtn.remove() : fsBtn.replaceWith(newFsBtn);
 
                 if (IS_SAFARI === false) {
-                    newFsBtn.addEventListener('click', () => {
-                        this.messenger.sendMessage(IframeMessenger.messages.TOGGLE_FULLSCREEN);
-                    });
+                    newFsBtn.addEventListener('click', () => this.toggleFullscreen());
                     this.messenger.sendMessage(IframeMessenger.messages.REQUEST_FULLSCREEN_STATE);
                 }
             });
@@ -5180,6 +5234,9 @@ const DEFAULT_SETTINGS_LAYOUT = {
             this.id = makeId();
             this.ignoreIframeSrcChangeOnce = false;
             this.isPendingConnection = false;
+            // CSS-only fullscreen used when the real Fullscreen API is denied
+            // (see toggleRealOrFakeFullscreen)
+            this.isFakeFullscreen = false;
             // Ugly shitcode fix for a playback positions. This assigns their value
             // to both the aniworld and s.to at the same time.
             // This is needed because these prefixes were missing before v4.8.3
@@ -5194,6 +5251,7 @@ const DEFAULT_SETTINGS_LAYOUT = {
             return {
                 CURRENT_FRANCHISE_DATA: 'CURRENT_FRANCHISE_DATA',
                 FULLSCREEN_STATE: 'FULLSCREEN_STATE',
+                TRIGGER_HOTKEY_ACTION: 'TRIGGER_HOTKEY_ACTION',
             };
         }
 
@@ -5417,14 +5475,9 @@ const DEFAULT_SETTINGS_LAYOUT = {
                         // Would not work on Safari
                         // but this should not be called from Safari anyway
                         case IframeMessenger.messages.TOGGLE_FULLSCREEN: {
-                            if (IS_SAFARI) break;
-                            // Notice how this then triggers a listener from this.init()
-                            if (document.fullscreenElement) {
-                                await document.exitFullscreen();
-                            } else {
-                                await document.documentElement.requestFullscreen();
-                            }
-
+                            // Notice how a successful real toggle then triggers
+                            // the fullscreenchange listener from this.init()
+                            await this.toggleRealOrFakeFullscreen();
                             break;
                         }
 
@@ -5451,7 +5504,66 @@ const DEFAULT_SETTINGS_LAYOUT = {
             };
         }
 
+        // Lets hotkeys work anywhere on the page, not just while the player
+        // iframe itself has focus. Fullscreen is handled locally (the top page
+        // already has real user-activation for its own document); everything
+        // else needs the player, so it's relayed to the iframe over commLink.
+        setupGlobalHotkeys() {
+            const relayableActionKeys = [
+                HOTKEYS_SETTINGS_MAP.playPause,
+                HOTKEYS_SETTINGS_MAP.pip,
+                HOTKEYS_SETTINGS_MAP.editIntro,
+                HOTKEYS_SETTINGS_MAP.editOutro,
+                HOTKEYS_SETTINGS_MAP.fastForward,
+                HOTKEYS_SETTINGS_MAP.fastBackward,
+                HOTKEYS_SETTINGS_MAP.largeSkip,
+                HOTKEYS_SETTINGS_MAP.skip10Back,
+                HOTKEYS_SETTINGS_MAP.skip10Forward,
+            ];
+
+            document.addEventListener('keydown', (ev) => {
+                // Escape exits our CSS-only fake fullscreen - there's no native
+                // fullscreenchange event for it, so this has to be handled manually.
+                if (ev.key === 'Escape' && this.isFakeFullscreen) {
+                    ev.preventDefault();
+                    this.toggleFakeFullscreen();
+                    return;
+                }
+
+                if (isEditableHotkeyTarget(ev.target)) return;
+
+                if (eventMatchesHotkey(ev, resolveHotkeySetting(HOTKEYS_SETTINGS_MAP.fullscreen))) {
+                    if (IS_SAFARI) return;
+
+                    ev.preventDefault();
+                    ev.stopPropagation();
+                    if (ev.repeat) return;
+
+                    this.toggleRealOrFakeFullscreen();
+                    return;
+                }
+
+                for (const actionKey of relayableActionKeys) {
+                    if (!eventMatchesHotkey(ev, resolveHotkeySetting(actionKey))) continue;
+                    // No connected player to act on - let the key do whatever it
+                    // would natively do (e.g. space scrolling the page) instead
+                    // of silently swallowing it.
+                    if (!this.commLink) return;
+
+                    ev.preventDefault();
+                    ev.stopPropagation();
+                    this.commLink.commands[TopScopeInterface.messages.TRIGGER_HOTKEY_ACTION]({
+                        actionKey,
+                        repeat: ev.repeat,
+                    });
+                    return;
+                }
+            }, true);
+        }
+
         async init(iframe) {
+            this.setupGlobalHotkeys();
+
             this.iframeSrcChangesListener = new MutationObserver((mutations) => {
                 for (const mutation of mutations) {
                     if (mutation.attributeName === 'src') {
@@ -5469,7 +5581,15 @@ const DEFAULT_SETTINGS_LAYOUT = {
                 attributes: true
             });
 
-            await this.initCrossFrameConnection();
+            try {
+                await this.initCrossFrameConnection();
+            } catch (e) {
+                // Hoster pages can redirect through several hops (e.g. VOE now
+                // bounces through an extra domain) before the real player page
+                // loads, so the first connection attempt may time out. The
+                // iframe 'load' listener retries on subsequent navigations.
+                console.warn('[Autoplay] Initial cross-frame connection failed, will retry on next iframe load:', e.message);
+            }
 
             if (IS_SAFARI) {
                 this.adaptFakeFullscreen();
@@ -5501,8 +5621,12 @@ const DEFAULT_SETTINGS_LAYOUT = {
                     const iframe = document.querySelector(TopScopeInterface.queries.playerIframe);
 
                     // Skip if top scope is a wrong one
-                    if (!iframe) return;
+                    if (!iframe) {
+                        console.log('[Autoplay] Top scope received unboundIframeId but no player iframe present, ignoring:', newValue);
+                        return;
+                    }
 
+                    console.log('[Autoplay] Top scope received handshake request, replying:', newValue);
                     GM_removeValueChangeListener(valueChangeListenerId);
                     clearTimeout(timeoutId);
                     resolve(newValue);
@@ -5513,8 +5637,9 @@ const DEFAULT_SETTINGS_LAYOUT = {
 
                     GM_removeValueChangeListener(valueChangeListenerId);
                     reject(new Error('Iframe connection timeout'));
-                }, 4 * 1000);
+                }, 8 * 1000);
             });
+            console.log('[Autoplay] Top scope sending handshake reply for', iframeId);
             GM_setValue(iframeId, this.id);
 
             this.commLink = new CommLinkHandler(this.id, {
@@ -5523,12 +5648,49 @@ const DEFAULT_SETTINGS_LAYOUT = {
             });
             this.commLink.registerSendCommand(TopScopeInterface.messages.CURRENT_FRANCHISE_DATA);
             this.commLink.registerSendCommand(TopScopeInterface.messages.FULLSCREEN_STATE);
+            this.commLink.registerSendCommand(TopScopeInterface.messages.TRIGGER_HOTKEY_ACTION);
 
             this.commLink.registerListener(iframeId, this.handleIframeMessages.bind(this));
 
             this.isPendingConnection = false;
         }
 
+        // Real document.documentElement.requestFullscreen() reliably fails with
+        // "Permissions check failed" when invoked here, because this is only ever
+        // called either asynchronously (relayed from a keypress/click inside the
+        // cross-origin player iframe, which loses transient activation crossing
+        // that boundary) - real activation only survives when this runs
+        // synchronously from a keydown that happened directly on the top page.
+        // Either way, fall back to a CSS-only pseudo-fullscreen layout (the same
+        // one already used to adapt styling for Safari) so the hotkey/button
+        // still does something useful instead of silently failing.
+        async toggleRealOrFakeFullscreen() {
+            if (IS_SAFARI) return;
+
+            if (this.isFakeFullscreen) {
+                this.toggleFakeFullscreen();
+                return;
+            }
+
+            try {
+                if (document.fullscreenElement) {
+                    await document.exitFullscreen();
+                } else {
+                    await document.documentElement.requestFullscreen();
+                }
+            } catch (e) {
+                console.warn('[Hotkeys] Native fullscreen denied, using CSS fallback layout instead:', e.message);
+                this.toggleFakeFullscreen();
+            }
+        }
+
+        toggleFakeFullscreen() {
+            this.isFakeFullscreen = !this.isFakeFullscreen;
+            this.adaptFakeFullscreen();
+            this.commLink?.commands?.[TopScopeInterface.messages.FULLSCREEN_STATE]?.({
+                isInFullscreen: this.isFakeFullscreen || !!document.fullscreenElement,
+            });
+        }
 
         adaptFakeFullscreen() {
             const Q = TopScopeInterface.queries;
@@ -5539,8 +5701,9 @@ const DEFAULT_SETTINGS_LAYOUT = {
 
             const newStoLayout = isNewStoLayout();
 
-            // Consider landscape mode as fullscreen on Safari
-            const isInFullscreen = (
+            // Consider landscape mode as fullscreen on Safari, and our manual
+            // CSS-only fallback (this.isFakeFullscreen) as fullscreen too
+            const isInFullscreen = this.isFakeFullscreen || (
                 IS_SAFARI ? window.innerWidth > window.innerHeight : !!document.fullscreenElement
             );
             if (isInFullscreen) {
@@ -6262,29 +6425,24 @@ const DEFAULT_SETTINGS_LAYOUT = {
         // Not a video page?
         if (!iframe) return;
 
-        // Remove the website logic responsible for marking episodes as watched.
-        // since the script would handle it instead. Awaiting is unnecessary
-        if (!newStoLayout) {
-            // Only needed for old layout
-            (async function waitForWatchedFunction(start = Date.now()) {
-                if (unsafeWindow.markAsWatched) {
-                    unsafeWindow.markAsWatched = () => {};
-                } else {
-                    if ((Date.now() - start) > (10 * 1000)) {
-                        throw new Error('Watched function didn\'t arrive in time');
-                    }
-
-                    await sleep();
-
-                    return waitForWatchedFunction(start);
-                }
-            }());
-        }
-
+        let topScopeInitialized = false;
         iframe.addEventListener('load', async () => {
-            await topScopeInterface.init(iframe);
-        }, {
-            once: true
+            if (!topScopeInitialized) {
+                topScopeInitialized = true;
+                await topScopeInterface.init(iframe);
+                return;
+            }
+
+            // Hoster redirect chains can fire several 'load' events before the
+            // real player page lands (e.g. VOE now bounces through an extra
+            // domain). Retry the handshake until it succeeds.
+            if (!topScopeInterface.commLink) {
+                try {
+                    await topScopeInterface.initCrossFrameConnection();
+                } catch (e) {
+                    console.warn('[Autoplay] Cross-frame connection retry failed:', e.message);
+                }
+            }
         });
 
         if (newStoLayout) {
@@ -6374,6 +6532,7 @@ const DEFAULT_SETTINGS_LAYOUT = {
     else {
         const isItVOEJWP = !!document.querySelector('meta[name="keywords"][content^="VOE"]');
         const isItVidoza = !!document.querySelector('meta[content*="Vidoza"]');
+        console.log('[Autoplay] Iframe scope check —', location.href, 'isItVOEJWP:', isItVOEJWP, 'isItVidoza:', isItVidoza);
         if ([isItVidoza, isItVOEJWP].every(e => !e)) {
             return;
         }
@@ -6396,10 +6555,17 @@ const DEFAULT_SETTINGS_LAYOUT = {
             if (!condition) continue;
             // Call early to get rid of ads and intercept listeners
             const iframeInterface = new Interface(iframeMessenger);
-            window.addEventListener('load', async () => {
+            const onIframePlayerPageLoaded = async () => {
+                console.log('[Autoplay] Iframe player page loaded, attempting cross-frame handshake —', location.href);
                 // Give a little bit of a time for the TopScopeInterface to prepare
                 await sleep(4);
-                await iframeMessenger.initCrossFrameConnection();
+                try {
+                    await iframeMessenger.initCrossFrameConnection();
+                    console.log('[Autoplay] Cross-frame handshake established with top scope');
+                } catch (e) {
+                    console.error('[Autoplay] Cross-frame handshake failed permanently:', e.message);
+                    return;
+                }
 
                 waitForElement(Interface.queries.player, {
                     existing: true,
@@ -6421,9 +6587,15 @@ const DEFAULT_SETTINGS_LAYOUT = {
 
                     await iframeInterface.init(player);
                 });
-            }, {
-                once: true
-            });
+            };
+            // These hoster pages are small/fast — by the time this content
+            // script runs (document_end), 'load' may have already fired, so a
+            // plain addEventListener('load', ...) would never trigger.
+            if (document.readyState === 'complete') {
+                onIframePlayerPageLoaded();
+            } else {
+                window.addEventListener('load', onIframePlayerPageLoaded, { once: true });
+            }
             break;
         }
     }

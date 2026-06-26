@@ -162,6 +162,13 @@ body {
   margin-top: 8px;
   line-height: 1.5;
 }
+.warning-hint {
+  color: #fbbf24;
+  background: #fbbf2414;
+  border: 1px solid #fbbf2433;
+  border-radius: 6px;
+  padding: 8px;
+}
 
 /* ── Settings panel ── */
 .settings-group { margin-bottom: 16px; }
