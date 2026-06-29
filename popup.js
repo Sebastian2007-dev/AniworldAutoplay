@@ -88,6 +88,18 @@ const TRANSLATIONS = {
     'setting.positionExpiry.desc': 'Gespeicherte Wiedergabeposition nach X Tagen löschen',
     'setting.skipCooldown.label': 'Skip-Abklingzeit, ms',
     'setting.skipCooldown.desc': 'Mindestzeit zwischen zwei Skips',
+    'setting.keyPlayPause.label': 'Play/Pause',
+    'setting.keyPlayPause.desc': 'Taste zum Starten/Pausieren',
+    'setting.keyPip.label': 'Bild-in-Bild',
+    'setting.keyPip.desc': 'Taste zum Umschalten von Bild-in-Bild',
+    'setting.keyEditIntro.label': 'Intro-Zeiten',
+    'setting.keyEditIntro.desc': 'Taste zum Anzeigen/Einreichen der Intro-Zeiten',
+    'setting.keyEditOutro.label': 'Outro-Zeiten',
+    'setting.keyEditOutro.desc': 'Taste zum Anzeigen/Einreichen der Outro-Zeiten',
+    'setting.keySkip10Back.label': '10s zurück',
+    'setting.keySkip10Back.desc': 'Taste zum Zurückspulen um 10 Sekunden',
+    'setting.keySkip10Forward.label': '10s vor',
+    'setting.keySkip10Forward.desc': 'Taste zum Vorspulen um 10 Sekunden',
     'setting.keyBackward.label': 'Schnell zurück',
     'setting.keyBackward.desc': 'Taste zum Rückspulen',
     'setting.keyForward.label': 'Schnell vor',
@@ -107,6 +119,11 @@ const TRANSLATIONS = {
     'setting.corsProxy.placeholder': 'https://...',
     'setting.commlinkInterval.label': 'Commlink Intervall, ms',
     'setting.commlinkInterval.desc': 'Polling-Intervall für iframe-Kommunikation',
+    'settings.autoplayForce': 'Autoplay mit Ton erzwingen (Registry)',
+    'autoplayForce.warning': '⚠ Erstellt eine Windows-Registry-Datei, die Chromes Autoplay-Sperre für die unten gelisteten Domains dauerhaft umgeht (Richtlinie „AutoplayAllowlist"). Die Extension kann die Registry nicht selbst ändern — du musst die heruntergeladene .reg-Datei manuell per Doppelklick ausführen und bestätigen. Die Änderung gilt für alle Chrome-Profile deines Windows-Kontos und erfordert einen Chrome-Neustart. Mit „Entfernen" kannst du sie wieder rückgängig machen.',
+    'autoplayForce.domains': domains => `Betroffene Domains: ${domains.join(', ')}`,
+    'autoplayForce.enableBtn': '⬇ Aktivieren (.reg)',
+    'autoplayForce.disableBtn': '⬇ Entfernen (.reg)',
     'save.btn': 'Speichern',
     'save.hint': '✓ Gespeichert',
     'save.reset': 'Auf Standard zurücksetzen',
@@ -196,6 +213,18 @@ const TRANSLATIONS = {
     'setting.positionExpiry.desc': 'Delete saved playback position after X days',
     'setting.skipCooldown.label': 'Skip cooldown, ms',
     'setting.skipCooldown.desc': 'Minimum time between two skips',
+    'setting.keyPlayPause.label': 'Play/Pause',
+    'setting.keyPlayPause.desc': 'Key to play/pause',
+    'setting.keyPip.label': 'Picture-in-Picture',
+    'setting.keyPip.desc': 'Key to toggle Picture-in-Picture',
+    'setting.keyEditIntro.label': 'Intro times',
+    'setting.keyEditIntro.desc': 'Key to view/submit intro times',
+    'setting.keyEditOutro.label': 'Outro times',
+    'setting.keyEditOutro.desc': 'Key to view/submit outro times',
+    'setting.keySkip10Back.label': '10s back',
+    'setting.keySkip10Back.desc': 'Key to rewind 10 seconds',
+    'setting.keySkip10Forward.label': '10s forward',
+    'setting.keySkip10Forward.desc': 'Key to skip ahead 10 seconds',
     'setting.keyBackward.label': 'Fast backward',
     'setting.keyBackward.desc': 'Key to rewind',
     'setting.keyForward.label': 'Fast forward',
@@ -215,6 +244,11 @@ const TRANSLATIONS = {
     'setting.corsProxy.placeholder': 'https://...',
     'setting.commlinkInterval.label': 'Commlink interval, ms',
     'setting.commlinkInterval.desc': 'Polling interval for iframe communication',
+    'settings.autoplayForce': 'Force autoplay with sound (registry)',
+    'autoplayForce.warning': '⚠ Generates a Windows registry file that permanently bypasses Chrome\'s autoplay-with-sound block for the domains listed below (the "AutoplayAllowlist" policy). The extension cannot modify the registry itself — you have to run the downloaded .reg file manually (double-click + confirm). The change applies to every Chrome profile on your Windows account and requires a Chrome restart. Use "Remove" to undo it.',
+    'autoplayForce.domains': domains => `Affected domains: ${domains.join(', ')}`,
+    'autoplayForce.enableBtn': '⬇ Enable (.reg)',
+    'autoplayForce.disableBtn': '⬇ Remove (.reg)',
     'save.btn': 'Save',
     'save.hint': '✓ Saved',
     'save.reset': 'Reset to defaults',
@@ -240,6 +274,7 @@ function applyLanguage(lang) {
     el.placeholder = t(el.dataset.i18nPh);
   });
   statusLabel.textContent = t(currentStatusKey);
+  updateAutoplayForceDomainsText();
 }
 
 // ── Tabs ──────────────────────────────────────────────────────────────────────
@@ -303,6 +338,12 @@ const NESTED_SETTINGS = [
   { elId: 's-corsProxy',          storeKey: 'advancedSettings', prop: 'corsProxy',                      default: 'https://aniworld-to-cors-proxy.fly.dev/' },
   { elId: 's-commlinkInterval',   storeKey: 'advancedSettings', prop: 'commlinkPollingIntervalMs',      default: 40    },
   // hotkeysSettings
+  { elId: 's-keyPlayPause',       storeKey: 'hotkeysSettings',  prop: 'playPause',                      default: 'space' },
+  { elId: 's-keyPip',             storeKey: 'hotkeysSettings',  prop: 'pip',                             default: 'p'     },
+  { elId: 's-keyEditIntro',       storeKey: 'hotkeysSettings',  prop: 'editIntro',                       default: 'i'     },
+  { elId: 's-keyEditOutro',       storeKey: 'hotkeysSettings',  prop: 'editOutro',                       default: 'o'     },
+  { elId: 's-keySkip10Back',      storeKey: 'hotkeysSettings',  prop: 'skip10Back',                      default: 'j'     },
+  { elId: 's-keySkip10Forward',   storeKey: 'hotkeysSettings',  prop: 'skip10Forward',                   default: 'l'     },
   { elId: 's-keyBackward',        storeKey: 'hotkeysSettings',  prop: 'fastBackward',                   default: 'left'  },
   { elId: 's-keyForward',         storeKey: 'hotkeysSettings',  prop: 'fastForward',                    default: 'right' },
   { elId: 's-keyFullscreen',      storeKey: 'hotkeysSettings',  prop: 'fullscreen',                     default: 'f'     },
@@ -423,6 +464,56 @@ document.getElementById('s-language').addEventListener('change', async e => {
   const count = Object.keys(allKeys).filter(k => k.startsWith('aw_local_skiptimes::')).length;
   const countEl = document.getElementById('skipTimesCount');
   if (countEl) countEl.textContent = t('setting.skipEntries.count', count);
+});
+
+// ── Force autoplay with sound (Windows registry policy) ───────────────────────
+// Reads the real site domains straight from the manifest's content_scripts
+// matches, so this stays correct if domains are ever added/removed there.
+function getAutoplayForceDomains() {
+  const matches = chrome.runtime.getManifest().content_scripts?.[0]?.matches ?? [];
+  const domains = new Set();
+  for (const pattern of matches) {
+    const m = pattern.match(/^[a-z*]+:\/\/([^/]+)\//i);
+    if (!m) continue;
+    const host = m[1];
+    if (!host || host.includes('*') || /^\d+\.\d+\.\d+\.\d+$/.test(host)) continue; // skip wildcards/IPs
+    domains.add(host);
+  }
+  return [...domains];
+}
+
+function updateAutoplayForceDomainsText() {
+  const el = document.getElementById('autoplayForceDomains');
+  if (el) el.textContent = t('autoplayForce.domains', getAutoplayForceDomains());
+}
+
+function buildAutoplayAllowlistReg(domains, { remove } = {}) {
+  const key = 'HKEY_CURRENT_USER\\SOFTWARE\\Policies\\Google\\Chrome\\AutoplayAllowlist';
+  if (remove) {
+    return `Windows Registry Editor Version 5.00\r\n\r\n[-${key}]\r\n`;
+  }
+  const entries = domains.map((d, i) => `"${i + 1}"="${d}"`).join('\r\n');
+  return `Windows Registry Editor Version 5.00\r\n\r\n[${key}]\r\n${entries}\r\n`;
+}
+
+function downloadRegFile(filename, content) {
+  const blob = new Blob([content], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+document.getElementById('downloadAutoplayRegEnable').addEventListener('click', () => {
+  const domains = getAutoplayForceDomains();
+  downloadRegFile('aniworld-autoplay-allow.reg', buildAutoplayAllowlistReg(domains));
+});
+document.getElementById('downloadAutoplayRegDisable').addEventListener('click', () => {
+  downloadRegFile('aniworld-autoplay-allow-remove.reg', buildAutoplayAllowlistReg([], { remove: true }));
 });
 
 // ── Edit skip times ───────────────────────────────────────────────────────────

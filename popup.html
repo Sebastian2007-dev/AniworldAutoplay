@@ -263,6 +263,48 @@
       <div class="settings-group-label" data-i18n="settings.hotkeys">Tastenkürzel</div>
       <div class="setting-row">
         <div>
+          <div class="setting-label" data-i18n="setting.keyPlayPause.label">Play/Pause</div>
+          <div class="setting-desc"  data-i18n="setting.keyPlayPause.desc">Taste zum Starten/Pausieren</div>
+        </div>
+        <input type="text" class="setting-input setting-input-key" id="s-keyPlayPause" maxlength="5">
+      </div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label" data-i18n="setting.keyPip.label">Bild-in-Bild</div>
+          <div class="setting-desc"  data-i18n="setting.keyPip.desc">Taste zum Umschalten von Bild-in-Bild</div>
+        </div>
+        <input type="text" class="setting-input setting-input-key" id="s-keyPip" maxlength="5">
+      </div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label" data-i18n="setting.keyEditIntro.label">Intro-Zeiten</div>
+          <div class="setting-desc"  data-i18n="setting.keyEditIntro.desc">Taste zum Anzeigen/Einreichen der Intro-Zeiten</div>
+        </div>
+        <input type="text" class="setting-input setting-input-key" id="s-keyEditIntro" maxlength="5">
+      </div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label" data-i18n="setting.keyEditOutro.label">Outro-Zeiten</div>
+          <div class="setting-desc"  data-i18n="setting.keyEditOutro.desc">Taste zum Anzeigen/Einreichen der Outro-Zeiten</div>
+        </div>
+        <input type="text" class="setting-input setting-input-key" id="s-keyEditOutro" maxlength="5">
+      </div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label" data-i18n="setting.keySkip10Back.label">10s zurück</div>
+          <div class="setting-desc"  data-i18n="setting.keySkip10Back.desc">Taste zum Zurückspulen um 10 Sekunden</div>
+        </div>
+        <input type="text" class="setting-input setting-input-key" id="s-keySkip10Back" maxlength="5">
+      </div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label" data-i18n="setting.keySkip10Forward.label">10s vor</div>
+          <div class="setting-desc"  data-i18n="setting.keySkip10Forward.desc">Taste zum Vorspulen um 10 Sekunden</div>
+        </div>
+        <input type="text" class="setting-input setting-input-key" id="s-keySkip10Forward" maxlength="5">
+      </div>
+      <div class="setting-row">
+        <div>
           <div class="setting-label" data-i18n="setting.keyBackward.label">Schnell zurück</div>
           <div class="setting-desc"  data-i18n="setting.keyBackward.desc">Taste zum Rückspulen</div>
         </div>
@@ -331,6 +373,16 @@
           <div class="setting-desc"  data-i18n="setting.commlinkInterval.desc">Polling-Intervall für iframe-Kommunikation</div>
         </div>
         <input type="number" class="setting-input" id="s-commlinkInterval" min="10" max="500" step="10" style="width:70px;text-align:center">
+      </div>
+    </div>
+
+    <div class="settings-group">
+      <div class="settings-group-label" data-i18n="settings.autoplayForce">Autoplay mit Ton erzwingen (Registry)</div>
+      <p class="aniskip-hint warning-hint" data-i18n="autoplayForce.warning">⚠ Erstellt eine Windows-Registry-Datei, die Chromes Autoplay-Sperre für die unten gelisteten Domains dauerhaft umgeht (Richtlinie „AutoplayAllowlist"). Die Extension kann die Registry nicht selbst ändern — du musst die heruntergeladene .reg-Datei manuell per Doppelklick ausführen und bestätigen. Die Änderung gilt für alle Chrome-Profile deines Windows-Kontos und erfordert einen Chrome-Neustart. Mit „Entfernen" kannst du sie wieder rückgängig machen.</p>
+      <p class="aniskip-hint" id="autoplayForceDomains" style="margin-top:4px"></p>
+      <div style="display:flex;gap:8px;margin-top:8px;">
+        <button class="btn-sm" id="downloadAutoplayRegEnable" style="flex:1" data-i18n="autoplayForce.enableBtn">⬇ Aktivieren (.reg)</button>
+        <button class="btn-sm" id="downloadAutoplayRegDisable" style="flex:1" data-i18n="autoplayForce.disableBtn">⬇ Entfernen (.reg)</button>
       </div>
     </div>
 
