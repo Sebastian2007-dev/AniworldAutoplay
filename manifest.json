@@ -24,6 +24,7 @@
     "https://serienstream.to/*",
     "http://186.2.175.5/*",
     "https://api.jikan.moe/*",
+    "https://api.myanimelist.net/*",
     "https://api.aniskip.com/*",
     "https://api.anime-skip.com/*",
     "*://*/*"
@@ -45,6 +46,7 @@
       "js": [
         "lib/keyboard.min.js",
         "lib/notiflix-aio.min.js",
+        "src/config.js",
         "src/gm-compat.js",
         "src/content.js"
       ],
@@ -56,7 +58,7 @@
 
   "web_accessible_resources": [
     {
-      "resources": ["src/vidmoly-patch.js"],
+      "resources": ["src/vidmoly-patch.js", "src/click-ad-blocker-inject.js"],
       "matches": ["<all_urls>"]
     }
   ],

@@ -311,41 +311,12 @@
     // Runs in every frame (top page + all iframes).
     // ============================================================
     (function installClickAdBlocker() {
-        // Inject into page context (content scripts run in isolated world
-        // and cannot override window.open for the page's own JS).
+        // CSP on aniworld.to blocks inline scripts — load as a web-accessible resource instead.
         const s = document.createElement('script');
-        s.textContent = `(function(){
-            try {
-                var _open = window.open;
-                window.open = function(url, target, features) {
-                    var t = (target || '').trim();
-                    // Block all new-tab/popup opens — these are always ads in video players
-                    if (!t || t === '_blank' || t === '_top' || t === '_parent') {
-                        console.log('[ClickAdBlocker] Blocked popup:', url);
-                        return { closed: true, close: function(){}, focus: function(){}, blur: function(){} };
-                    }
-                    return _open.apply(this, arguments);
-                };
-            } catch (e) {}
-            // Also block <a target="_blank/_top/_parent"> clicks that bypass window.open
-            document.addEventListener('click', function(e) {
-                try {
-                    var a = e.target && e.target.closest && e.target.closest('a[target]');
-                    if (!a) return;
-                    var t = (a.target || '').trim();
-                    if (t !== '_blank' && t !== '_top' && t !== '_parent') return;
-                    var href = a.href || '';
-                    // Allow legitimate aniworld/s.to same-site links
-                    if (/^https?:\\/\\/(aniworld\\.to|s\\.to|serienstream\\.to)([\\/\\?#]|$)/.test(href)) return;
-                    e.preventDefault();
-                    e.stopImmediatePropagation();
-                    console.log('[ClickAdBlocker] Blocked link:', href);
-                } catch (e) {}
-            }, true);
-        })();`;
+        s.src = chrome.runtime.getURL('src/click-ad-blocker-inject.js');
+        s.onload = () => s.remove();
         try {
             (document.head || document.documentElement).appendChild(s);
-            s.remove();
         } catch (e) {}
     }());
 
@@ -353,12 +324,12 @@
     // AniSkip Integration Module
     // ============================================================
     const AniSkipModule = {
-        gmFetchJson(url) {
+        gmFetchJson(url, opts = {}) {
             return new Promise((resolve, reject) => {
                 GM_xmlhttpRequest({
                     method: "GET",
                     url,
-                    headers: { "Accept": "application/json" },
+                    headers: { "Accept": "application/json", ...(opts.headers || {}) },
                     timeout: 8000,
                     onload: (res) => {
                         try {
@@ -749,6 +720,30 @@
             } catch (e) {
                 console.error('[AniSkip] Failed to fetch MAL ID:', e?.message || e, { title, slug, season });
             }
+
+            // Official MAL API fallback (requires AW_MAL_CLIENT_ID in src/config.js)
+            if (typeof AW_MAL_CLIENT_ID === 'string' && AW_MAL_CLIENT_ID) {
+                try {
+                    for (const searchTitle of [season && season > 1 ? `${title} season ${season}` : null, title].filter(Boolean)) {
+                        const q = encodeURIComponent(searchTitle);
+                        const json = await this.gmFetchJson(
+                            `https://api.myanimelist.net/v2/anime?q=${q}&limit=10&fields=id,title,alternative_titles`,
+                            { headers: { 'X-MAL-CLIENT-ID': AW_MAL_CLIENT_ID } }
+                        );
+                        const results = (json?.data ?? []).map(entry => ({ ...entry.node, mal_id: entry.node.id }));
+                        const match = this.pickBestMatch(results, title, season);
+                        if (match?.best?.mal_id && match.bestTextScore >= 25) {
+                            const malId = String(match.best.mal_id);
+                            console.log('[AniSkip] MAL official API match:', { requestedTitle: title, matchedTitle: match.best.title, malId });
+                            localStorage.setItem(malCacheKey, JSON.stringify({ malId, _cachedAt: Date.now() }));
+                            return malId;
+                        }
+                    }
+                } catch (e) {
+                    console.warn('[AniSkip] MAL official API fallback failed:', e?.message || e);
+                }
+            }
+
             return null;
         },
 
@@ -3731,10 +3726,7 @@ const DEFAULT_SETTINGS_LAYOUT = {
                         GM_setValue(noDataKey, { _cachedAt: Date.now() });
                     }
                     if (advancedSettings[ADVANCED_SETTINGS_MAP.showAniSkipNotifications]) {
-                        Notiflix.Notify.info(i18n.aniSkipFetchFailed, {
-                            timeout: 2000,
-                            position: 'right-bottom',
-                        });
+                        this.showSubmitNotification(null, episode);
                     }
                     globalAniSkipData = null;
                     return null;
@@ -3897,6 +3889,12 @@ const DEFAULT_SETTINGS_LAYOUT = {
                     <button id="aw-submit-close" style="margin-left:auto;width:26px;height:26px;border:none;background:${bgTertiary};border-radius:6px;color:${textSecondary};cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">×</button>
                 </div>
                 <div style="padding:16px;">
+                    ${!malId ? `<div style="margin-bottom:12px;">
+                        <label style="display:block;font-size:11px;color:${textSecondary};margin-bottom:6px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;">
+                            MAL ID <span style="font-weight:400;text-transform:none;">(${userLang === 'de' ? 'für API-Einreichung, optional' : 'for API submission, optional'})</span>
+                        </label>
+                        <input type="text" id="aw-mal-id" placeholder="${userLang === 'de' ? 'z.B. 12345 – von myanimelist.net' : 'e.g. 12345 – from myanimelist.net'}" style="${inputStyle}width:100%;box-sizing:border-box;">
+                    </div>` : ''}
                     <div style="margin-bottom:12px;">
                         <label style="display:block;font-size:11px;color:${textSecondary};margin-bottom:6px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;">
                             ${userLang === 'de' ? `${typeLabelDE} Start` : `${typeLabelEN} Start`}
@@ -4014,14 +4012,19 @@ const DEFAULT_SETTINGS_LAYOUT = {
 
                 let resolvedMalId = malId;
                 if (!resolvedMalId) {
-                    resolvedMalId = await AniSkipModule.getMalId(this.animeTitle, this.animeSlug, this.seasonNumber);
+                    const manualMalId = dialog.querySelector('#aw-mal-id')?.value?.trim();
+                    if (manualMalId && /^\d+$/.test(manualMalId)) {
+                        resolvedMalId = manualMalId;
+                    } else {
+                        resolvedMalId = await AniSkipModule.getMalId(this.animeTitle, this.animeSlug, this.seasonNumber);
+                    }
                 }
                 if (!resolvedMalId) {
                     Notiflix.Notify.failure(
                         userLang === 'de'
-                            ? 'MAL-ID nicht gefunden. Bitte "Lokal speichern" verwenden.'
-                            : 'Could not find MAL ID. Use "Save Locally" instead.',
-                        { timeout: 4000, position: 'right-bottom' });
+                            ? 'MAL-ID nicht gefunden. Bitte MAL-ID manuell eingeben oder "Lokal speichern" verwenden.'
+                            : 'Could not find MAL ID. Enter it manually or use "Save Locally".',
+                        { timeout: 5000, position: 'right-bottom' });
                     return;
                 }
 
