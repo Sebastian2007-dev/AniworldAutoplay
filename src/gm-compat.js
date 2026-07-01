@@ -90,6 +90,23 @@ const GMCompat = (() => {
     }
   }
 
+  function _buildLogEntry(level, args) {
+    const msg = args.map(a => {
+      if (typeof a === 'string') return a;
+      try { return JSON.stringify(a); } catch (_) { return String(a); }
+    }).join(' ');
+
+    // Extract tag as src if present
+    let src = '';
+    const tagMatch = msg.match(/^\[([^\]]+)\]/);
+    if (tagMatch) src = tagMatch[1];
+
+    const now = new Date();
+    const ts = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
+
+    return { ts, src, level, msg };
+  }
+
   function _interceptConsole() {
     const methods = { log: 'log', warn: 'warn', error: 'error', info: 'info' };
     for (const [method, level] of Object.entries(methods)) {
@@ -97,32 +114,32 @@ const GMCompat = (() => {
       console[method] = (...args) => {
         orig(...args);
         try {
-          const msg = args.map(a => {
-            if (typeof a === 'string') return a;
-            try { return JSON.stringify(a); } catch (_) { return String(a); }
-          }).join(' ');
+          const entry = _buildLogEntry(level, args);
 
           // Only forward tagged messages (to avoid flooding with unrelated page output)
           const shouldForward =
             level === 'error' ||
             level === 'warn' ||
-            LOG_PREFIXES.some(p => msg.includes(p));
+            LOG_PREFIXES.some(p => entry.msg.includes(p));
 
           if (!shouldForward) return;
 
-          // Extract tag as src if present
-          let src = '';
-          const tagMatch = msg.match(/^\[([^\]]+)\]/);
-          if (tagMatch) src = tagMatch[1];
-
-          const now = new Date();
-          const ts = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
-
-          _logBatch.push({ ts, src, level, msg });
+          _logBatch.push(entry);
           _scheduledFlush();
         } catch (_) { /* never break the page */ }
       };
     }
+  }
+
+  // Log to the popup's log viewer WITHOUT printing to the real devtools console.
+  // Use for expected/handled conditions (e.g. a retry step that's about to
+  // succeed on the next attempt) that would otherwise look like a real page
+  // error to anyone with devtools open, but are still worth keeping in our log.
+  function _logSilent(level, ...args) {
+    try {
+      _logBatch.push(_buildLogEntry(level, args));
+      _scheduledFlush();
+    } catch (_) { /* never break the page */ }
   }
 
   return {
@@ -131,6 +148,7 @@ const GMCompat = (() => {
     _listeners,
     get listenerIdCounter() { return ++_listenerIdCounter; },
     interceptConsole: _interceptConsole,
+    logSilent: _logSilent,
   };
 })();
 

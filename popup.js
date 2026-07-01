@@ -53,10 +53,8 @@ const TRANSLATIONS = {
     'setting.autoSkipStart.desc': 'Automatisch am Anfang jeder Episode überspringen',
     'setting.skipSecondsStart.label': 'Sekunden am Anfang',
     'setting.skipSecondsStart.desc': 'Sekunden die am Anfang übersprungen werden',
-    'setting.introSkipSize.label': 'Intro-Skipgröße, Sek',
-    'setting.introSkipSize.desc': 'Sekunden beim manuellen Intro-Skip',
     'setting.outroThreshold.label': 'Outro-Schwelle, Sek',
-    'setting.outroThreshold.desc': 'Autoplay startet wenn weniger als diese Sekunden übrig sind',
+    'setting.outroThreshold.desc': 'Nur Fallback: löst Autoplay aus, falls das Videoende nie erkannt wird und weniger als diese Sekunden übrig sind',
     'setting.showSkipBtn.label': 'Skip-Intro-Button anzeigen',
     'setting.showSkipBtn.desc': 'Button zum manuellen Intro-Überspringen einblenden',
     'setting.useAniSkip.label': 'AniSkip API verwenden',
@@ -108,10 +106,8 @@ const TRANSLATIONS = {
     'setting.keyFullscreen.desc': 'Taste für Vollbildmodus',
     'setting.keyLargeSkip.label': 'Großer Skip',
     'setting.keyLargeSkip.desc': 'Taste für Intro-Skip',
-    'setting.defaultIntroSkip.label': 'Standard Intro-Skip, Sek',
-    'setting.defaultIntroSkip.desc': 'Standard-Intro-Skipgröße für neue Serien',
     'setting.defaultOutroThresh.label': 'Standard Outro-Schwelle, Sek',
-    'setting.defaultOutroThresh.desc': 'Standard-Outro-Schwelle für neue Serien',
+    'setting.defaultOutroThresh.desc': 'Standard-Fallback-Schwelle für neue Serien',
     'setting.fastFwdSize.label': 'Schnellvorlauf, Sek',
     'setting.fastFwdSize.desc': 'Sekunden beim Schnellvorlauf',
     'setting.corsProxy.label': 'CORS-Proxy',
@@ -178,10 +174,8 @@ const TRANSLATIONS = {
     'setting.autoSkipStart.desc': 'Automatically skip at the beginning of each episode',
     'setting.skipSecondsStart.label': 'Seconds at start',
     'setting.skipSecondsStart.desc': 'Seconds to skip at the beginning',
-    'setting.introSkipSize.label': 'Intro skip size, sec',
-    'setting.introSkipSize.desc': 'Seconds skipped on manual intro skip',
     'setting.outroThreshold.label': 'Outro threshold, sec',
-    'setting.outroThreshold.desc': 'Autoplay starts when fewer than these seconds remain',
+    'setting.outroThreshold.desc': 'Fallback only: triggers autoplay if the video end is never detected and fewer than these seconds remain',
     'setting.showSkipBtn.label': 'Show skip intro button',
     'setting.showSkipBtn.desc': 'Show button for manual intro skipping',
     'setting.useAniSkip.label': 'Use AniSkip API',
@@ -233,10 +227,8 @@ const TRANSLATIONS = {
     'setting.keyFullscreen.desc': 'Key for fullscreen mode',
     'setting.keyLargeSkip.label': 'Large skip',
     'setting.keyLargeSkip.desc': 'Key for intro skip',
-    'setting.defaultIntroSkip.label': 'Default intro skip, sec',
-    'setting.defaultIntroSkip.desc': 'Default intro skip size for new series',
     'setting.defaultOutroThresh.label': 'Default outro threshold, sec',
-    'setting.defaultOutroThresh.desc': 'Default outro threshold for new series',
+    'setting.defaultOutroThresh.desc': 'Default fallback threshold for new series',
     'setting.fastFwdSize.label': 'Fast forward size, sec',
     'setting.fastFwdSize.desc': 'Seconds per fast forward',
     'setting.corsProxy.label': 'CORS proxy',
@@ -316,8 +308,7 @@ const NESTED_SETTINGS = [
   { elId: 's-autoSkipIntro',      storeKey: 'coreSettings',     prop: 'autoSkipIntro',                  default: true  },
   { elId: 's-autoSkipStart',      storeKey: 'coreSettings',     prop: 'shouldAutoSkipOnStart',          default: true  },
   { elId: 's-skipSecondsStart',   storeKey: 'coreSettings',     prop: 'autoSkipSecondsOnStart',         default: 0     },
-  { elId: 's-introSkipSize',      storeKey: 'coreSettings',     prop: 'currentLargeSkipSizeS',          default: 87    },
-  { elId: 's-outroThreshold',     storeKey: 'coreSettings',     prop: 'currentOutroSkipThresholdS',     default: 90    },
+  { elId: 's-outroThreshold',     storeKey: 'coreSettings',     prop: 'currentOutroSkipThresholdS',     default: 2     },
   // mainSettings
   { elId: 's-playbackMem',        storeKey: 'mainSettings',     prop: 'playbackPositionMemory',         default: true  },
   { elId: 's-mutedAutoplay',      storeKey: 'mainSettings',     prop: 'shouldAutoplayMuted',            default: true  },
@@ -332,8 +323,7 @@ const NESTED_SETTINGS = [
   { elId: 's-markWatched',        storeKey: 'advancedSettings', prop: 'markWatchedAfterS',              default: 0     },
   { elId: 's-positionExpiry',     storeKey: 'advancedSettings', prop: 'playbackPositionExpirationDays', default: 30    },
   { elId: 's-skipCooldown',       storeKey: 'advancedSettings', prop: 'largeSkipCooldownMs',            default: 300   },
-  { elId: 's-defaultIntroSkip',   storeKey: 'advancedSettings', prop: 'defaultLargeSkipSizeS',          default: 87    },
-  { elId: 's-defaultOutroThresh', storeKey: 'advancedSettings', prop: 'defaultOutroSkipThresholdS',     default: 90    },
+  { elId: 's-defaultOutroThresh', storeKey: 'advancedSettings', prop: 'defaultOutroSkipThresholdS',     default: 2     },
   { elId: 's-fastFwdSize',        storeKey: 'advancedSettings', prop: 'fastForwardSizeS',               default: 10    },
   { elId: 's-corsProxy',          storeKey: 'advancedSettings', prop: 'corsProxy',                      default: 'https://aniworld-to-cors-proxy.fly.dev/' },
   { elId: 's-commlinkInterval',   storeKey: 'advancedSettings', prop: 'commlinkPollingIntervalMs',      default: 40    },
@@ -465,6 +455,23 @@ document.getElementById('s-language').addEventListener('change', async e => {
   const countEl = document.getElementById('skipTimesCount');
   if (countEl) countEl.textContent = t('setting.skipEntries.count', count);
 });
+
+// Auto-save: every other setting is persisted immediately on change, so
+// nothing is lost if the popup gets closed before hitting the Save button.
+// Saved right away (not debounced) since a closing popup kills pending
+// timers before they get a chance to fire. The Save buttons still work,
+// they're just no longer required.
+for (const { elId } of [...NESTED_SETTINGS, ...FLAT_SETTINGS]) {
+  if (elId === 's-language') continue; // already saved immediately above
+  const el = document.getElementById(elId);
+  if (!el) continue;
+  const hintId = el.closest('#panel-advanced') ? 'saveHintAdv' : 'saveHint';
+  const evt = (el.type === 'checkbox' || el.tagName === 'SELECT') ? 'change' : 'input';
+  el.addEventListener(evt, async () => {
+    await doSaveSettings();
+    showHint(hintId, 'save.hint');
+  });
+}
 
 // ── Force autoplay with sound (Windows registry policy) ───────────────────────
 // Reads the real site domains straight from the manifest's content_scripts

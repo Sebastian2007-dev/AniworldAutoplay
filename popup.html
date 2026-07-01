@@ -131,17 +131,10 @@
       <div class="settings-group-label" data-i18n="settings.skipSizes">Skip-Größen</div>
       <div class="setting-row">
         <div>
-          <div class="setting-label" data-i18n="setting.introSkipSize.label">Intro-Skipgröße, Sek</div>
-          <div class="setting-desc"  data-i18n="setting.introSkipSize.desc">Sekunden beim manuellen Intro-Skip</div>
-        </div>
-        <input type="number" class="setting-input" id="s-introSkipSize" min="0" max="300" step="1" style="width:70px;text-align:center">
-      </div>
-      <div class="setting-row">
-        <div>
           <div class="setting-label" data-i18n="setting.outroThreshold.label">Outro-Schwelle, Sek</div>
-          <div class="setting-desc"  data-i18n="setting.outroThreshold.desc">Autoplay startet wenn weniger als diese Sekunden übrig sind</div>
+          <div class="setting-desc"  data-i18n="setting.outroThreshold.desc">Nur Fallback: löst Autoplay aus, falls das Videoende nie erkannt wird und weniger als diese Sekunden übrig sind</div>
         </div>
-        <input type="number" class="setting-input" id="s-outroThreshold" min="1" max="300" step="1" style="width:70px;text-align:center">
+        <input type="number" class="setting-input" id="s-outroThreshold" min="0" max="300" step="1" style="width:70px;text-align:center">
       </div>
       <div class="setting-row">
         <div>
@@ -337,17 +330,10 @@
       <div class="settings-group-label" data-i18n="settings.defaults">Standard-Werte</div>
       <div class="setting-row">
         <div>
-          <div class="setting-label" data-i18n="setting.defaultIntroSkip.label">Standard Intro-Skip, Sek</div>
-          <div class="setting-desc"  data-i18n="setting.defaultIntroSkip.desc">Standard-Intro-Skipgröße für neue Serien</div>
-        </div>
-        <input type="number" class="setting-input" id="s-defaultIntroSkip" min="0" max="300" step="1" style="width:70px;text-align:center">
-      </div>
-      <div class="setting-row">
-        <div>
           <div class="setting-label" data-i18n="setting.defaultOutroThresh.label">Standard Outro-Schwelle, Sek</div>
-          <div class="setting-desc"  data-i18n="setting.defaultOutroThresh.desc">Standard-Outro-Schwelle für neue Serien</div>
+          <div class="setting-desc"  data-i18n="setting.defaultOutroThresh.desc">Standard-Fallback-Schwelle für neue Serien</div>
         </div>
-        <input type="number" class="setting-input" id="s-defaultOutroThresh" min="1" max="300" step="1" style="width:70px;text-align:center">
+        <input type="number" class="setting-input" id="s-defaultOutroThresh" min="0" max="300" step="1" style="width:70px;text-align:center">
       </div>
       <div class="setting-row">
         <div>

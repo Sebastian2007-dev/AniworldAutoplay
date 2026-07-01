@@ -942,6 +942,25 @@
             return GM_getValue(key, null);
         },
 
+        // Per-episode override for whether auto-skip is enabled, independent per
+        // type ('intro'/'outro'). Returns null when no override is set, meaning
+        // the global coreSettings.autoSkipIntro toggle should decide.
+        getEpisodeSkipEnabled(slug, season, episode, type) {
+            const key = `aw_skip_enabled::${slug}::s${season ?? 1}::e${episode}::${type}`;
+            return GM_getValue(key, null);
+        },
+
+        // value: true/false to force that state for this episode, or null to
+        // remove the override and fall back to the global setting again.
+        setEpisodeSkipEnabled(slug, season, episode, type, value) {
+            const key = `aw_skip_enabled::${slug}::s${season ?? 1}::e${episode}::${type}`;
+            if (value === null) {
+                GM_deleteValue(key);
+            } else {
+                GM_setValue(key, !!value);
+            }
+        },
+
         // Submit outro (ED) times to AniSkip API
         async submitOutroTimes(malId, episode, episodeLength, outroStart, outroEnd) {
             if (!malId || !episode) return { success: false, error: 'Missing MAL ID or episode' };
@@ -1315,10 +1334,8 @@
             skipSecondsOnStartTooltip: 'Number of seconds to skip from the beginning when auto-skip is enabled.',
             overrideDoubletapBehavior: 'Override double-tap behavior*',
             overrideDoubletapBehaviorTooltip: 'If enabled, default double-tap behavior (if any) is being overrided: double-tap right/left side of a video player to fast forward/rewind. Double-tap in a middle applies an intro skip. Page reload is required for this setting to take effect!',
-            introSkipSize: 'Intro skip size, sec',
-            introSkipSizeTooltip: 'Intro skip size. This is linked to the title and should stay the same across episodes',
             outroSkipThreshold: 'Outro skip threshold, sec',
-            outroSkipThresholdTooltip: 'Autoplay triggers when the video player has fewer than THIS number of seconds left to play. It is linked to the title and should stay the same across episodes',
+            outroSkipThresholdTooltip: 'Fallback only: autoplay normally triggers when the video actually ends. This is used as a backup trigger for players that never fire that event, in case the video has fewer than THIS number of seconds left to play',
             resetToDefaults: 'Reset to defaults',
             hotkeys: 'Hotkeys',
             fastBackward: 'Fast backward*',
@@ -1329,10 +1346,8 @@
             fullscreenTooltip: 'Hotkey for a fullscreen mode toggle. Page reload is required for this setting to take effect!',
             largeSkip: 'Intro skip*',
             largeSkipTooltip: 'Hotkey for an intro skip. Page reload is required for this setting to take effect!',
-            defaultIntroSkipSize: 'Default intro skip size, sec',
-            defaultIntroSkipSizeTooltip: 'Default intro skip size',
             defaultOutroSkipThreshold: 'Default outro skip threshold, sec',
-            defaultOutroSkipThresholdTooltip: 'Default outro skip threshold',
+            defaultOutroSkipThresholdTooltip: 'Default fallback threshold for new series (see Outro skip threshold)',
             markWatchedAfter: 'Mark watched after, sec',
             markWatchedAfterTooltip: 'Number of seconds of approximate playback time after which a video is being marked as watched. Set to 0 to disable and mark only by a triggered autoplay',
             fastForwardSize: 'Fast forward size, sec',
@@ -1377,7 +1392,6 @@
             aniSkipFetchFailed: 'AniSkip: No data found, using fallback',
             aniSkipIntroDetected: 'Intro detected via AniSkip',
             aniSkipOutroDetected: 'Outro detected via AniSkip',
-            usingFallbackTimes: 'Using manual skip times',
             playbackPositionExpiration: 'Playback position expiration',
             playbackPositionExpirationTooltip: 'How many DAYS need to pass before a playback position is removed from the memory',
             corsProxy: 'CORS proxy',
@@ -1416,10 +1430,8 @@
             skipSecondsOnStartTooltip: 'Anzahl der Sekunden, die vom Anfang an übersprungen werden sollen, wenn das automatische Überspringen aktiviert ist.',
             overrideDoubletapBehavior: 'Doppeltipp-Verhalten überschreiben*',
             overrideDoubletapBehaviorTooltip: 'Wenn aktiviert, wird das standardmäßige Doppeltipp-Verhalten (falls vorhanden) überschrieben: Doppeltippen Sie auf die rechte/linke Seite eines Videoplayers, um schnell vor- oder zurückzuspulen. Ein Doppeltipp in der Mitte wendet einen Intro-Skip an. Ein Neuladen der Seite ist für diese Einstellung erforderlich!',
-            introSkipSize: 'Intro-Skipgröße, Sek',
-            introSkipSizeTooltip: 'Intro-Skipgröße. Dies ist mit dem Titel verknüpft und sollte über alle Episoden hinweg gleich bleiben',
             outroSkipThreshold: 'Outro-Skipschwelle, Sek',
-            outroSkipThresholdTooltip: 'Autoplay wird ausgelöst, wenn der Videoplayer weniger als DIESE Anzahl von Sekunden zum Abspielen übrig hat. Es ist mit dem Titel verknüpft und sollte über alle Episoden hinweg gleich bleiben',
+            outroSkipThresholdTooltip: 'Nur Fallback: Autoplay wird normalerweise ausgelöst, sobald das Video wirklich zu Ende ist. Diese Schwelle dient nur als Sicherheitsnetz für Player, die dieses Ereignis nie feuern, falls weniger als DIESE Anzahl Sekunden übrig sind',
             resetToDefaults: 'Auf Standard zurücksetzen',
             hotkeys: 'Hotkeys',
             fastBackward: 'Schneller Rücklauf*',
@@ -1430,10 +1442,8 @@
             fullscreenTooltip: 'Hotkey zum Umschalten des Vollbildmodus. Ein Neuladen der Seite ist für diese Einstellung erforderlich!',
             largeSkip: 'Intro überspringen*',
             largeSkipTooltip: 'Hotkey für einen Intro-Skip. Ein Neuladen der Seite ist für diese Einstellung erforderlich!',
-            defaultIntroSkipSize: 'Standard-Intro-Skipgröße, Sek',
-            defaultIntroSkipSizeTooltip: 'Standard-Intro-Skipgröße',
             defaultOutroSkipThreshold: 'Standard-Outro-Skipschwelle, Sek',
-            defaultOutroSkipThresholdTooltip: 'Standard-Outro-Skipschwelle',
+            defaultOutroSkipThresholdTooltip: 'Standard-Fallback-Schwelle für neue Serien (siehe Outro-Skipschwelle)',
             markWatchedAfter: 'Als angesehen markieren nach, Sek',
             markWatchedAfterTooltip: 'Anzahl der Sekunden ungefährer Wiedergabezeit, nach der ein Video als angesehen markiert wird. Auf 0 setzen, um zu deaktivieren und nur durch ein ausgelöstes Autoplay zu markieren',
             fastForwardSize: 'Schnellvorlaufgröße, Sek',
@@ -1478,7 +1488,6 @@
             aniSkipFetchFailed: 'AniSkip: Keine Daten gefunden, Fallback wird verwendet',
             aniSkipIntroDetected: 'Intro via AniSkip erkannt',
             aniSkipOutroDetected: 'Outro via AniSkip erkannt',
-            usingFallbackTimes: 'Manuelle Skip-Zeiten werden verwendet',
             playbackPositionExpiration: 'Ablauf der Wiedergabeposition',
             playbackPositionExpirationTooltip: 'Wie viele TAGE müssen vergehen, bevor eine Wiedergabeposition aus dem Speicher entfernt wird',
             corsProxy: 'CORS-Proxy',
@@ -1681,7 +1690,6 @@ const DEFAULT_SETTINGS_LAYOUT = {
         VIDEO_PROVIDERS_MAP.Vidoza,
     ];
     const CORE_SETTINGS_MAP = {
-        currentLargeSkipSizeS: 'currentLargeSkipSizeS',
         currentOutroSkipThresholdS: 'currentOutroSkipThresholdS',
         isAutoplayEnabled: 'isAutoplayEnabled',
         isMuted: 'isMuted',
@@ -1694,10 +1702,9 @@ const DEFAULT_SETTINGS_LAYOUT = {
     };
     // Note that defaults are applied only on a very first run of the script
     const CORE_SETTINGS_DEFAULTS = {
-        // Default value doesn't matter because it fallbacks to
-        // ADVANCED_SETTINGS_DEFAULTS.defaultLargeSkipSizeS anyway
-        [CORE_SETTINGS_MAP.currentLargeSkipSizeS]: 87,
-        [CORE_SETTINGS_MAP.currentOutroSkipThresholdS]: 90, // same logic
+        // Just a fallback safety net now (see setupOutroSkipHandling) - the real
+        // trigger is the player's 'ended' event, so this can stay small.
+        [CORE_SETTINGS_MAP.currentOutroSkipThresholdS]: 2,
         [CORE_SETTINGS_MAP.shouldAutoSkipOnStart]: true,
         [CORE_SETTINGS_MAP.autoSkipSecondsOnStart]: 0,
         [CORE_SETTINGS_MAP.isAutoplayEnabled]: false,
@@ -1752,7 +1759,6 @@ const DEFAULT_SETTINGS_LAYOUT = {
     const ADVANCED_SETTINGS_MAP = {
         commlinkPollingIntervalMs: 'commlinkPollingIntervalMs',
         corsProxy: 'corsProxy',
-        defaultLargeSkipSizeS: 'defaultLargeSkipSizeS',
         defaultOutroSkipThresholdS: 'defaultOutroSkipThresholdS',
         doubletapDistanceThresholdPx: 'doubletapDistanceThresholdPx',
         doubletapTimingThresholdMs: 'doubletapTimingThresholdMs',
@@ -1772,8 +1778,9 @@ const DEFAULT_SETTINGS_LAYOUT = {
     const ADVANCED_SETTINGS_DEFAULTS = {
         [ADVANCED_SETTINGS_MAP.commlinkPollingIntervalMs]: 40,
         [ADVANCED_SETTINGS_MAP.corsProxy]: 'https://aniworld-to-cors-proxy.fly.dev/',
-        [ADVANCED_SETTINGS_MAP.defaultLargeSkipSizeS]: 87,
-        [ADVANCED_SETTINGS_MAP.defaultOutroSkipThresholdS]: 90,
+        // Fallback safety net only (see setupOutroSkipHandling) - 'ended' is the
+        // real trigger, so new series don't need a big early margin anymore.
+        [ADVANCED_SETTINGS_MAP.defaultOutroSkipThresholdS]: 2,
         [ADVANCED_SETTINGS_MAP.doubletapDistanceThresholdPx]: 50,
         [ADVANCED_SETTINGS_MAP.doubletapTimingThresholdMs]: 300,
         [ADVANCED_SETTINGS_MAP.fastForwardSizeS]: 10,
@@ -2413,7 +2420,7 @@ const DEFAULT_SETTINGS_LAYOUT = {
     }
 
     // Create "Skip intro" button
-    function setupSkipIntroButton(player) {
+    function setupSkipIntroButton(player, iframeInterface = null) {
         const SKIP_BTN_STYLE = `
     .SkipIntroBtn {
       position: fixed;
@@ -2465,21 +2472,16 @@ const DEFAULT_SETTINGS_LAYOUT = {
     }
   `;
         const button = document.createElement('button');
-        button.className = 'SkipIntroBtn';
+        // Starts hidden - only revealed once we actually have AniSkip intro data.
+        button.className = 'SkipIntroBtn invisible';
         button.textContent = i18n.skipIntro;
         button.addEventListener('click', () => {
-            console.log('[Skip Button] Clicked. globalAniSkipData:', globalAniSkipData);
+            // Only ever jump to the exact AniSkip intro end - no more blind
+            // fallback jumps by a fixed size when there's no real data.
+            if (!globalAniSkipData || !globalAniSkipData.intro) return;
 
-            // Check if we have AniSkip data for intro
-            if (globalAniSkipData && globalAniSkipData.intro) {
-                // Use AniSkip intro end time
-                console.log('[Skip Button] Using AniSkip time:', globalAniSkipData.intro.end);
-                player.currentTime = globalAniSkipData.intro.end;
-            } else {
-                // Fallback to manual skip size
-                console.log('[Skip Button] Using fallback skip size:', coreSettings[CORE_SETTINGS_MAP.currentLargeSkipSizeS]);
-                player.currentTime += coreSettings[CORE_SETTINGS_MAP.currentLargeSkipSizeS];
-            }
+            console.log('[Skip Button] Using AniSkip time:', globalAniSkipData.intro.end);
+            player.currentTime = globalAniSkipData.intro.end;
 
             if (advancedSettings[ADVANCED_SETTINGS_MAP.playOnLargeSkip]) {
                 player.play();
@@ -2500,23 +2502,49 @@ const DEFAULT_SETTINGS_LAYOUT = {
             }
         };
 
-        const observeActivity = (container) => {
-            new MutationObserver(() => {
-                const isActive = (
-                    container.classList.contains('jw-state-paused') ||
-                    !container.classList.contains('jw-flag-user-inactive') ||
-                    container.classList.contains('vjs-paused') ||
-                    !container.classList.contains('vjs-user-inactive')
-                );
-                if (document.contains(button)) {
-                    button.classList.toggle('invisible', !isActive || !advancedSettings[ADVANCED_SETTINGS_MAP.showSkipIntroButton]);
+        const activityContainer = (
+            document.querySelector('#player') ||
+            document.querySelector('#my-video') ||
+            document.querySelector('#a')
+        );
 
-                }
-            }).observe(container, {
+        // Only ever shown while auto intro-skip is off AND playback is currently
+        // inside the detected intro window - hidden in every other case.
+        const updateVisibility = () => {
+            const hasIntroData = !!(globalAniSkipData && globalAniSkipData.intro);
+            if (!hasIntroData) {
+                button.classList.add('invisible');
+                return;
+            }
+
+            const { start, end } = globalAniSkipData.intro;
+            const currentTime = player.currentTime;
+            const withinIntro = currentTime >= start && currentTime < end;
+            const autoSkipEnabled = iframeInterface ? iframeInterface.isEpisodeSkipEnabled('intro') : false;
+            const isActive = !activityContainer || (
+                activityContainer.classList.contains('jw-state-paused') ||
+                !activityContainer.classList.contains('jw-flag-user-inactive') ||
+                activityContainer.classList.contains('vjs-paused') ||
+                !activityContainer.classList.contains('vjs-user-inactive')
+            );
+
+            const shouldShow = withinIntro && !autoSkipEnabled && isActive && advancedSettings[ADVANCED_SETTINGS_MAP.showSkipIntroButton];
+            if (document.contains(button)) {
+                button.classList.toggle('invisible', !shouldShow);
+            }
+
+            if (currentTime >= end) {
+                button.remove();
+                player.removeEventListener('timeupdate', updateVisibility);
+            }
+        };
+
+        if (activityContainer) {
+            new MutationObserver(updateVisibility).observe(activityContainer, {
                 attributes: true,
                 attributeFilter: ['class'],
             });
-        };
+        }
 
         waitForElement('.jw-controlbar, #my-video, .jw-controls', {
             existing: true,
@@ -2531,37 +2559,7 @@ const DEFAULT_SETTINGS_LAYOUT = {
             }
         });
 
-
-        const activityContainer = (
-            document.querySelector('#player') ||
-            document.querySelector('#my-video') ||
-            document.querySelector('#a')
-        );
-        if (activityContainer) observeActivity(activityContainer);
-
-        const hideAt = advancedSettings[ADVANCED_SETTINGS_MAP.showSkipIntroButtonSeconds];
-
-        const timeCheckInterval = () => {
-            // If we have AniSkip data, show button from start until intro ends
-            if (globalAniSkipData && globalAniSkipData.intro) {
-                const currentTime = player.currentTime;
-                const introEnd = globalAniSkipData.intro.end;
-
-                // Hide button only after intro ends
-                if (currentTime >= introEnd) {
-                    button.remove();
-                    player.removeEventListener('timeupdate', timeCheckInterval);
-                }
-            } else {
-                // Fallback to original time-based logic
-                if (player.currentTime >= hideAt) {
-                    button.remove();
-                    player.removeEventListener('timeupdate', timeCheckInterval);
-                }
-            }
-        };
-
-        player.addEventListener('timeupdate', timeCheckInterval);
+        player.addEventListener('timeupdate', updateVisibility);
     }
 
 
@@ -2656,13 +2654,15 @@ const DEFAULT_SETTINGS_LAYOUT = {
             submitBtn.style.bottom = fs ? '125px' : '102px';
         });
 
-        // Show both buttons when ED is playing, hide when ED ends
+        // Show the skip button only when ED is playing AND auto outro-skip is off;
+        // the submit button stays tied purely to the ED window.
         player.addEventListener('timeupdate', () => {
             if (!globalAniSkipData || !globalAniSkipData.outro) return;
             const t = player.currentTime;
             const { start, end } = globalAniSkipData.outro;
             const inEd = t >= start && t < end;
-            button.classList.toggle('invisible', !inEd);
+            const autoSkipEnabled = iframeInterface ? iframeInterface.isEpisodeSkipEnabled('outro') : false;
+            button.classList.toggle('invisible', !inEd || autoSkipEnabled);
             submitBtn.classList.toggle('invisible', !inEd);
             if (t >= end) {
                 if (document.contains(button)) button.remove();
@@ -2989,7 +2989,10 @@ const DEFAULT_SETTINGS_LAYOUT = {
             console.log('[PiP] Restored successfully on attempt 1');
             return;
         } catch (e) {
-            console.warn(`[PiP] Attempt 1 failed (${e.message}) — waiting for playing event...`);
+            // Expected: browsers require a user gesture for auto-PiP right after
+            // canplay. Log to our own viewer only — a real console.warn here would
+            // look like a page error even though attempt 2 usually succeeds.
+            GMCompat.logSilent('warn', `[PiP] Attempt 1 failed (${e.message}) — waiting for playing event...`);
         }
 
         // Attempt 2: wait until video is actually playing (some players need this)
@@ -3006,7 +3009,10 @@ const DEFAULT_SETTINGS_LAYOUT = {
             await player.requestPictureInPicture();
             console.log('[PiP] Restored successfully on attempt 2');
         } catch (e) {
-            console.warn(`[PiP] Attempt 2 failed (${e.message}) — user gesture required, use the PiP hotkey to restore manually`);
+            // Expected: some browsers just won't auto-restore PiP without a real
+            // user gesture. This is handled (the user can press the PiP hotkey),
+            // so keep it out of the real console and only in our own log.
+            GMCompat.logSilent('warn', `[PiP] Attempt 2 failed (${e.message}) — user gesture required, use the PiP hotkey to restore manually`);
         }
     }
 
@@ -3484,9 +3490,6 @@ const DEFAULT_SETTINGS_LAYOUT = {
             this.animeSlug = null;
             this.episodeNumber = null;
             this.seasonNumber = null;
-            coreSettings[CORE_SETTINGS_MAP.currentLargeSkipSizeS] = (
-                advancedSettings[ADVANCED_SETTINGS_MAP.defaultLargeSkipSizeS]
-            );
             coreSettings[CORE_SETTINGS_MAP.currentOutroSkipThresholdS] = (
                 advancedSettings[ADVANCED_SETTINGS_MAP.defaultOutroSkipThresholdS]
             );
@@ -3560,19 +3563,10 @@ const DEFAULT_SETTINGS_LAYOUT = {
                                 this.currentFranchiseId = packet.data.currentFranchiseId;
 
                                 const {
-                                    largeSkipSizeS,
                                     outroSkipThresholdS
                                 } = GM_getValue(
                                     `${IframeInterface.franchiseSpecificDataGMPrefix}${this.currentFranchiseId}`
                                 ) || {};
-
-                                if (isNumeric(largeSkipSizeS)) {
-                                    coreSettings[CORE_SETTINGS_MAP.currentLargeSkipSizeS] = largeSkipSizeS;
-                                } else {
-                                    coreSettings[CORE_SETTINGS_MAP.currentLargeSkipSizeS] = (
-                                        advancedSettings[ADVANCED_SETTINGS_MAP.defaultLargeSkipSizeS]
-                                    );
-                                }
 
                                 if (isNumeric(outroSkipThresholdS)) {
                                     coreSettings[CORE_SETTINGS_MAP.currentOutroSkipThresholdS] = outroSkipThresholdS;
@@ -3680,18 +3674,27 @@ const DEFAULT_SETTINGS_LAYOUT = {
                 }
 
                 // ── Check for local override data ──────────────────────────────
+                // `false` is an explicit "confirmed no intro/outro" marker for this
+                // episode, distinct from null/undefined (no override, defer to the API).
+                const hasOverride = (v) => v !== undefined && v !== null;
+                const resolveLocalData = (ld) => ld ? {
+                    intro: ld.intro === false ? null : ld.intro,
+                    outro: ld.outro === false ? null : ld.outro,
+                } : null;
+
                 const localData = AniSkipModule.getLocalSkipTimes(slug, season, episode);
-                const hasLocalData = !!(localData && (localData.intro || localData.outro));
+                const hasLocalData = !!(localData && (hasOverride(localData.intro) || hasOverride(localData.outro)));
                 if (hasLocalData) {
                     console.log('[AniSkip] Found local override data:', localData);
                 }
 
-                // Merge local overrides on top of API data (local always wins per type)
+                // Merge local overrides on top of API data (local always wins per type;
+                // an explicit "no data" override wins too, resolving to null).
                 const applyLocalOverrides = (data) => {
                     if (!hasLocalData) return data;
                     const merged = data ? { ...data } : {};
-                    if (localData.intro) merged.intro = localData.intro;
-                    if (localData.outro) merged.outro = localData.outro;
+                    if (hasOverride(localData.intro)) merged.intro = localData.intro === false ? null : localData.intro;
+                    if (hasOverride(localData.outro)) merged.outro = localData.outro === false ? null : localData.outro;
                     return merged;
                 };
 
@@ -3742,11 +3745,12 @@ const DEFAULT_SETTINGS_LAYOUT = {
                     // No MAL ID, no AnimeSkip data — use local if available
                     if (hasLocalData) {
                         console.log('[AniSkip] No MAL ID / API data, using local override data');
-                        globalAniSkipData = localData;
+                        const resolved = resolveLocalData(localData);
+                        globalAniSkipData = resolved;
                         if (advancedSettings[ADVANCED_SETTINGS_MAP.showAniSkipNotifications]) {
                             this.showOverrideButton(null, episode);
                         }
-                        return localData;
+                        return resolved;
                     }
                     if (epLen > 0) {
                         GM_setValue(noDataKey, { _cachedAt: Date.now() });
@@ -3810,11 +3814,12 @@ const DEFAULT_SETTINGS_LAYOUT = {
                 // ── All API sources failed — check local data before giving up ──
                 if (hasLocalData) {
                     console.log('[AniSkip] All API sources exhausted, using local override data:', localData);
-                    globalAniSkipData = localData;
+                    const resolved = resolveLocalData(localData);
+                    globalAniSkipData = resolved;
                     if (advancedSettings[ADVANCED_SETTINGS_MAP.showAniSkipNotifications]) {
                         this.showOverrideButton(malId, episode);
                     }
-                    return localData;
+                    return resolved;
                 }
 
                 // ── All sources failed — cache result + show submit notification ──
@@ -3878,7 +3883,7 @@ const DEFAULT_SETTINGS_LAYOUT = {
             dialog.id = 'aw-submit-dialog';
             dialog.style.cssText = `
                 position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
-                width:340px;z-index:99999;background:${bgPrimary};border-radius:${borderRadius};
+                width:320px;z-index:99999;background:${bgPrimary};border-radius:${borderRadius};
                 overflow:hidden;box-shadow:0 25px 50px rgba(0,0,0,0.5);font-family:${fontFamily};color:${textPrimary};
             `;
 
@@ -3889,11 +3894,21 @@ const DEFAULT_SETTINGS_LAYOUT = {
                 document.head.appendChild(s);
             }
 
-            const inputStyle = `flex:1;padding:10px 12px;background:${bgSecondary};border:1px solid ${borderColor};border-radius:8px;color:${textPrimary};font-family:inherit;font-size:13px;`;
-            const setStyle   = `padding:10px 13px;background:${bgTertiary};border:1px solid ${borderColor};border-radius:8px;color:${textSecondary};font-family:inherit;font-size:11px;font-weight:500;cursor:pointer;white-space:nowrap;`;
+            const inputStyle = `width:100%;box-sizing:border-box;padding:7px 26px 7px 8px;background:${bgSecondary};border:1px solid ${borderColor};border-radius:6px;color:${textPrimary};font-family:inherit;font-size:12px;`;
+            const setStyle   = `padding:7px 8px;background:${bgTertiary};border:1px solid ${borderColor};border-radius:6px;color:${textSecondary};font-family:inherit;font-size:10px;font-weight:500;cursor:pointer;white-space:nowrap;`;
+            const nowIconStyle = `position:absolute;right:3px;top:50%;transform:translateY(-50%);width:19px;height:19px;border:none;background:transparent;color:${textSecondary};font-size:11px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;border-radius:4px;padding:0;`;
+
+            const skipToggleStyle = (active) => `flex:1;padding:6px 4px;background:${active ? typeColor : bgTertiary};border:1px solid ${active ? typeColor : borderColor};border-radius:6px;color:${active ? 'white' : textSecondary};font-family:inherit;font-size:10px;font-weight:600;cursor:pointer;`;
+            const currentSkipOverride = AniSkipModule.getEpisodeSkipEnabled(this.animeSlug, this.seasonNumber, episode, type);
 
             const typeLabelDE = isIntro ? 'Intro' : 'Outro';
             const typeLabelEN = isIntro ? 'Intro' : 'Outro';
+
+            // `false` is an explicit "confirmed no intro/outro" marker stored locally
+            // (see AniSkipModule.saveLocalSkipTimes) - pre-check the checkbox if that's
+            // already the case for this episode/type.
+            const localOverride = AniSkipModule.getLocalSkipTimes(this.animeSlug, this.seasonNumber, episode);
+            const initialNoData = (localOverride ? (isIntro ? localOverride.intro : localOverride.outro) : undefined) === false;
 
             const titleText = isOverride
                 ? (userLang === 'de' ? `${typeLabelDE} Zeiten überschreiben` : `Override ${typeLabelEN} Times`)
@@ -3903,52 +3918,72 @@ const DEFAULT_SETTINGS_LAYOUT = {
                 : (userLang === 'de' ? 'Der Community helfen!' : 'Help the community!');
 
             dialog.innerHTML = `
-                <div style="background:${bgSecondary};padding:14px 16px;border-bottom:1px solid ${borderColor};display:flex;align-items:center;gap:12px;position:relative;">
+                <div style="background:${bgSecondary};padding:10px 12px;border-bottom:1px solid ${borderColor};display:flex;align-items:center;gap:10px;position:relative;">
                     <div style="position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,${typeColor},${accentSecondary},${typeColor});background-size:200% 100%;animation:aw-submit-shimmer 3s ease-in-out infinite;"></div>
-                    <div style="width:40px;height:40px;background:linear-gradient(135deg,${typeColor},${accentSecondary});border-radius:10px;display:flex;align-items:center;justify-content:center;color:white;font-size:18px;flex-shrink:0;">
+                    <div style="width:30px;height:30px;background:linear-gradient(135deg,${typeColor},${accentSecondary});border-radius:8px;display:flex;align-items:center;justify-content:center;color:white;font-size:15px;flex-shrink:0;">
                         ${isOverride ? '✎' : '↑'}
                     </div>
                     <div style="min-width:0;">
-                        <h3 style="font-size:15px;font-weight:600;margin:0 0 2px 0;">${titleText}</h3>
-                        <p style="font-size:11px;color:${textSecondary};margin:0;">${subtitleText}</p>
+                        <h3 style="font-size:13px;font-weight:600;margin:0;">${titleText}</h3>
+                        <p style="font-size:10px;color:${textSecondary};margin:0;">${subtitleText}</p>
                     </div>
-                    <button id="aw-submit-close" style="margin-left:auto;width:26px;height:26px;border:none;background:${bgTertiary};border-radius:6px;color:${textSecondary};cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">×</button>
+                    <button id="aw-submit-close" style="margin-left:auto;width:22px;height:22px;border:none;background:${bgTertiary};border-radius:5px;color:${textSecondary};cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">×</button>
                 </div>
-                <div style="padding:16px;">
-                    ${!malId ? `<div style="margin-bottom:12px;">
-                        <label style="display:block;font-size:11px;color:${textSecondary};margin-bottom:6px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;">
-                            MAL ID <span style="font-weight:400;text-transform:none;">(${userLang === 'de' ? 'für API-Einreichung, optional' : 'for API submission, optional'})</span>
+                <div style="padding:12px;">
+                    ${!malId ? `<div style="margin-bottom:8px;">
+                        <label style="display:block;font-size:10px;color:${textSecondary};margin-bottom:3px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;">
+                            MAL ID <span style="font-weight:400;text-transform:none;">(${userLang === 'de' ? 'optional' : 'optional'})</span>
                         </label>
-                        <input type="text" id="aw-mal-id" placeholder="${userLang === 'de' ? 'z.B. 12345 – von myanimelist.net' : 'e.g. 12345 – from myanimelist.net'}" style="${inputStyle}width:100%;box-sizing:border-box;">
+                        <input type="text" id="aw-mal-id" placeholder="${userLang === 'de' ? 'z.B. 12345' : 'e.g. 12345'}" style="width:100%;box-sizing:border-box;padding:7px 8px;background:${bgSecondary};border:1px solid ${borderColor};border-radius:6px;color:${textPrimary};font-family:inherit;font-size:12px;">
                     </div>` : ''}
-                    <div style="margin-bottom:12px;">
-                        <label style="display:block;font-size:11px;color:${textSecondary};margin-bottom:6px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;">
-                            ${userLang === 'de' ? `${typeLabelDE} Start` : `${typeLabelEN} Start`}
+                    <div style="margin-bottom:8px;display:flex;align-items:center;gap:6px;padding:5px 7px;background:${bgTertiary};border-radius:6px;">
+                        <input type="checkbox" id="aw-no-data" ${initialNoData ? 'checked' : ''} style="width:14px;height:14px;cursor:pointer;flex-shrink:0;">
+                        <label for="aw-no-data" style="font-size:11px;color:${textSecondary};cursor:pointer;">
+                            ${userLang === 'de' ? `Kein ${typeLabelDE} vorhanden` : `No ${typeLabelEN} in this episode`}
                         </label>
-                        <div style="display:flex;gap:6px;">
-                            <input type="text" id="aw-time-start" value="${initStart}" style="${inputStyle}">
-                            <button id="aw-set-start" style="${setStyle}">${userLang === 'de' ? 'Jetzt' : 'Now'}</button>
+                    </div>
+                    <div id="aw-time-fields" style="${initialNoData ? 'opacity:.4;' : ''}">
+                        <div style="display:flex;gap:6px;margin-bottom:8px;align-items:flex-end;">
+                            <div style="flex:1;min-width:0;">
+                                <label style="display:block;font-size:10px;color:${textSecondary};margin-bottom:3px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;">
+                                    ${userLang === 'de' ? 'Start' : 'Start'}
+                                </label>
+                                <div style="position:relative;">
+                                    <input type="text" id="aw-time-start" value="${initStart}" style="${inputStyle}" ${initialNoData ? 'disabled' : ''}>
+                                    <button id="aw-set-start" title="${userLang === 'de' ? 'Jetzt' : 'Now'}" style="${nowIconStyle}" ${initialNoData ? 'disabled' : ''}>🎯</button>
+                                </div>
+                            </div>
+                            <button id="aw-add-end" title="Start +1:30" style="${setStyle}" ${initialNoData ? 'disabled' : ''}>+1:30</button>
+                            <div style="flex:1;min-width:0;">
+                                <label style="display:block;font-size:10px;color:${textSecondary};margin-bottom:3px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;">
+                                    ${userLang === 'de' ? 'Ende' : 'End'}
+                                </label>
+                                <div style="position:relative;">
+                                    <input type="text" id="aw-time-end" value="${initEnd}" style="${inputStyle}" ${initialNoData ? 'disabled' : ''}>
+                                    <button id="aw-set-end" title="${userLang === 'de' ? 'Jetzt' : 'Now'}" style="${nowIconStyle}" ${initialNoData ? 'disabled' : ''}>🎯</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div>
+                            <label style="display:block;font-size:10px;color:${textSecondary};margin-bottom:3px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;">
+                                ${userLang === 'de' ? `${typeLabelDE} überspringen` : `Skip ${typeLabelEN}`}
+                            </label>
+                            <div id="aw-skip-toggle" style="display:flex;gap:4px;">
+                                <button type="button" data-val="default" style="${skipToggleStyle(currentSkipOverride === null)}" ${initialNoData ? 'disabled' : ''}>${userLang === 'de' ? 'Standard' : 'Default'}</button>
+                                <button type="button" data-val="on" style="${skipToggleStyle(currentSkipOverride === true)}" ${initialNoData ? 'disabled' : ''}>${userLang === 'de' ? 'An' : 'On'}</button>
+                                <button type="button" data-val="off" style="${skipToggleStyle(currentSkipOverride === false)}" ${initialNoData ? 'disabled' : ''}>${userLang === 'de' ? 'Aus' : 'Off'}</button>
+                            </div>
                         </div>
                     </div>
-                    <div style="margin-bottom:18px;">
-                        <label style="display:block;font-size:11px;color:${textSecondary};margin-bottom:6px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;">
-                            ${userLang === 'de' ? `${typeLabelDE} Ende` : `${typeLabelEN} End`}
-                        </label>
-                        <div style="display:flex;gap:6px;">
-                            <input type="text" id="aw-time-end" value="${initEnd}" style="${inputStyle}">
-                            <button id="aw-set-end" style="${setStyle}">${userLang === 'de' ? 'Jetzt' : 'Now'}</button>
-                            <button id="aw-add-end" style="${setStyle}" title="+1:30 min">+1:30</button>
-                        </div>
-                    </div>
-                    <div style="display:flex;gap:8px;">
-                        <button id="aw-submit-cancel" style="padding:10px 14px;background:${bgTertiary};border:none;border-radius:8px;color:${textSecondary};font-family:inherit;font-size:12px;font-weight:500;cursor:pointer;">
+                    <div style="display:flex;gap:6px;margin-top:10px;">
+                        <button id="aw-submit-cancel" style="padding:8px 10px;background:${bgTertiary};border:none;border-radius:6px;color:${textSecondary};font-family:inherit;font-size:11px;font-weight:500;cursor:pointer;">
                             ${userLang === 'de' ? 'Abbrechen' : 'Cancel'}
                         </button>
-                        <button id="aw-save-local" style="flex:1;padding:10px;background:rgba(34,197,94,0.15);border:1px solid rgba(34,197,94,0.4);border-radius:8px;color:rgb(34,197,94);font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;">
+                        <button id="aw-save-local" style="flex:1;padding:8px;background:rgba(34,197,94,0.15);border:1px solid rgba(34,197,94,0.4);border-radius:6px;color:rgb(34,197,94);font-family:inherit;font-size:11px;font-weight:600;cursor:pointer;">
                             ${userLang === 'de' ? '💾 Lokal speichern' : '💾 Save Locally'}
                         </button>
-                        <button id="aw-submit-confirm" style="flex:1;padding:10px;background:linear-gradient(135deg,${typeColor},${accentSecondary});border:none;border-radius:8px;color:white;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;">
-                            ${userLang === 'de' ? '↑ API einreichen' : '↑ Submit to API'}
+                        <button id="aw-submit-confirm" style="flex:1;padding:8px;background:linear-gradient(135deg,${typeColor},${accentSecondary});border:none;border-radius:6px;color:white;font-family:inherit;font-size:11px;font-weight:600;cursor:pointer;${initialNoData ? 'opacity:.4;cursor:not-allowed;' : ''}" ${initialNoData ? 'disabled' : ''}>
+                            ${userLang === 'de' ? '↑ Einreichen' : '↑ Submit'}
                         </button>
                     </div>
                 </div>
@@ -3959,6 +3994,30 @@ const DEFAULT_SETTINGS_LAYOUT = {
 
             dialog.querySelectorAll('input').forEach(input => {
                 ['keydown', 'keyup', 'keypress'].forEach(ev => input.addEventListener(ev, e => e.stopPropagation()));
+            });
+
+            dialog.querySelectorAll('#aw-skip-toggle button').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const value = btn.dataset.val === 'default' ? null : (btn.dataset.val === 'on');
+                    AniSkipModule.setEpisodeSkipEnabled(this.animeSlug, this.seasonNumber, episode, type, value);
+                    dialog.querySelectorAll('#aw-skip-toggle button').forEach(b => {
+                        b.setAttribute('style', skipToggleStyle(b === btn));
+                    });
+                });
+            });
+
+            // "No intro/outro in this episode" — greys out the time fields (they're
+            // moot) and disables the API submit button (there's nothing real to submit).
+            const noDataCheckbox = dialog.querySelector('#aw-no-data');
+            const timeFields = dialog.querySelector('#aw-time-fields');
+            const submitConfirmBtn = dialog.querySelector('#aw-submit-confirm');
+            noDataCheckbox.addEventListener('change', () => {
+                const checked = noDataCheckbox.checked;
+                timeFields.style.opacity = checked ? '.4' : '';
+                timeFields.querySelectorAll('input, button').forEach(el => { el.disabled = checked; });
+                submitConfirmBtn.disabled = checked;
+                submitConfirmBtn.style.opacity = checked ? '.4' : '';
+                submitConfirmBtn.style.cursor = checked ? 'not-allowed' : 'pointer';
             });
 
             const closeDialog = () => {
@@ -3998,6 +4057,33 @@ const DEFAULT_SETTINGS_LAYOUT = {
 
             // ── Save Locally ──────────────────────────────────────────────────────
             dialog.querySelector('#aw-save-local').addEventListener('click', () => {
+                if (noDataCheckbox.checked) {
+                    // `false` marks "confirmed no intro/outro" for this episode - takes
+                    // precedence over API data and stops the auto-skip logic from
+                    // ever trying to skip something that doesn't exist.
+                    const introArg = isIntro  ? false : undefined;
+                    const outroArg = !isIntro ? false : undefined;
+                    AniSkipModule.saveLocalSkipTimes(this.animeSlug, this.seasonNumber, episode, introArg, outroArg);
+
+                    if (!globalAniSkipData) globalAniSkipData = {};
+                    if (isIntro)  globalAniSkipData.intro = null;
+                    else          globalAniSkipData.outro = null;
+
+                    closeDialog();
+                    if (button) button.remove();
+                    if (isIntro) submitDialogValues.introStart = submitDialogValues.introEnd = null;
+                    else         submitDialogValues.outroStart = submitDialogValues.outroEnd = null;
+
+                    Notiflix.Notify.success(userLang === 'de'
+                        ? `Als "kein ${typeLabelDE}" markiert. Wird nicht mehr angezeigt oder gesucht.`
+                        : `Marked as "no ${typeLabelEN}". Won't be shown or searched for again.`,
+                        { timeout: 4000, position: 'right-bottom' });
+
+                    const playerEl = document.querySelector('video');
+                    if (playerEl) addTimelineMarkers(playerEl);
+                    return;
+                }
+
                 const times = readFields();
                 if (!times) return;
 
@@ -4427,8 +4513,11 @@ const DEFAULT_SETTINGS_LAYOUT = {
                         player.currentTime += advancedSettings[ADVANCED_SETTINGS_MAP.fastForwardSizeS];
                     }
                 } else {
-                    if (coreSettings[CORE_SETTINGS_MAP.currentLargeSkipSizeS]) {
-                        player.currentTime += coreSettings[CORE_SETTINGS_MAP.currentLargeSkipSizeS];
+                    // Double-tap the middle = skip intro. Only jump to the exact
+                    // AniSkip intro end - no blind fallback jump without real data.
+                    const introEnd = globalAniSkipData?.intro?.end ?? null;
+                    if (introEnd !== null && player.currentTime < introEnd) {
+                        player.currentTime = introEnd;
                         if (advancedSettings[ADVANCED_SETTINGS_MAP.playOnLargeSkip]) {
                             player.play();
                         }
@@ -4510,36 +4599,22 @@ const DEFAULT_SETTINGS_LAYOUT = {
                     this.toggleFullscreen();
                 },
                 [HOTKEYS_SETTINGS_MAP.largeSkip]: () => {
-                    if (!coreSettings[CORE_SETTINGS_MAP.currentLargeSkipSizeS]) return;
-
                     const now = Date.now();
                     if (now - lastLargeSkipTime < largeSkipCooldownMs) return;
+
+                    // Only ever jump to the exact AniSkip intro end - no more blind
+                    // fallback jump by a fixed size when there's no real data.
+                    const introEnd = globalAniSkipData?.intro?.end ?? null;
+                    if (introEnd === null || player.currentTime >= introEnd) return;
                     lastLargeSkipTime = now;
 
-                    console.log('[Keyboard Skip] Pressed. globalAniSkipData:', globalAniSkipData);
-
-                    // Only treat this as "skip the intro" while still inside/before
-                    // it - otherwise we'd yank playback backward to the intro's end
-                    // every time this key is pressed later in the episode.
-                    const introEnd = globalAniSkipData?.intro?.end ?? null;
-                    if (introEnd !== null && player.currentTime < introEnd) {
-                        console.log('[Keyboard Skip] Using AniSkip time:', introEnd);
-                        player.currentTime = introEnd;
-                        if (advancedSettings[ADVANCED_SETTINGS_MAP.showAniSkipNotifications]) {
-                            Notiflix.Notify.success(i18n.aniSkipIntroDetected, {
-                                timeout: 1500,
-                                position: 'right-bottom'
-                            });
-                        }
-                    } else {
-                        console.log('[Keyboard Skip] Using fallback skip size:', coreSettings[CORE_SETTINGS_MAP.currentLargeSkipSizeS]);
-                        player.currentTime += coreSettings[CORE_SETTINGS_MAP.currentLargeSkipSizeS];
-                        if (globalAniSkipData === null && advancedSettings[ADVANCED_SETTINGS_MAP.useAniSkip] && advancedSettings[ADVANCED_SETTINGS_MAP.showAniSkipNotifications]) {
-                            Notiflix.Notify.info(i18n.usingFallbackTimes, {
-                                timeout: 1500,
-                                position: 'right-bottom'
-                            });
-                        }
+                    console.log('[Keyboard Skip] Using AniSkip time:', introEnd);
+                    player.currentTime = introEnd;
+                    if (advancedSettings[ADVANCED_SETTINGS_MAP.showAniSkipNotifications]) {
+                        Notiflix.Notify.success(i18n.aniSkipIntroDetected, {
+                            timeout: 1500,
+                            position: 'right-bottom'
+                        });
                     }
 
                     const skipBtn = document.querySelector('.SkipIntroBtn');
@@ -4576,6 +4651,30 @@ const DEFAULT_SETTINGS_LAYOUT = {
             let outroHasBeenReached = false;
             let lastLoggedState = null;
 
+            const fireAutoplayNext = (reason) => {
+                if (outroHasBeenReached) return;
+                outroHasBeenReached = true;
+                console.log(`[Autoplay] ${reason} — firing AUTOPLAY_NEXT`);
+
+                // Remember PiP state so the next episode can restore it
+                if (document.pictureInPictureElement) {
+                    GM_setValue('aw_pip_restore', { _at: Date.now() });
+                    console.log('[PiP] Active before autoplay — flagged for restoration on next episode');
+                }
+
+                this.messenger.sendMessage(IframeMessenger.messages.AUTOPLAY_NEXT);
+            };
+
+            // Primary trigger: the video actually finished. This is what decides
+            // when autoplay fires - no more jumping ahead X seconds early.
+            player.addEventListener('ended', () => {
+                if (!coreSettings[CORE_SETTINGS_MAP.isAutoplayEnabled]) return;
+                fireAutoplayNext('Video ended');
+            });
+
+            // Fallback only: some embeds never fire 'ended' reliably, or report a
+            // slightly-off duration. currentOutroSkipThresholdS is now just a
+            // safety net for those cases, not the normal trigger.
             setInterval(() => {
                 const autoplayOn = coreSettings[CORE_SETTINGS_MAP.isAutoplayEnabled];
 
@@ -4589,30 +4688,29 @@ const DEFAULT_SETTINGS_LAYOUT = {
                 if (outroHasBeenReached || !autoplayOn) return;
 
                 const timeLeft = player.duration - player.currentTime;
+                if (!Number.isFinite(timeLeft)) return;
 
                 if (timeLeft <= coreSettings[CORE_SETTINGS_MAP.currentOutroSkipThresholdS]) {
-                    outroHasBeenReached = true;
-                    console.log(`[Autoplay] Threshold reached (${timeLeft.toFixed(1)}s left) — firing AUTOPLAY_NEXT`);
-
-                    // Remember PiP state so the next episode can restore it
-                    if (document.pictureInPictureElement) {
-                        GM_setValue('aw_pip_restore', { _at: Date.now() });
-                        console.log('[PiP] Active before autoplay — flagged for restoration on next episode');
-                    }
-
-                    this.messenger.sendMessage(IframeMessenger.messages.AUTOPLAY_NEXT);
+                    fireAutoplayNext(`Fallback threshold reached (${timeLeft.toFixed(1)}s left, 'ended' never fired)`);
                 }
             }, 250);
         }
 
+        isEpisodeSkipEnabled(type) {
+            const override = AniSkipModule.getEpisodeSkipEnabled(
+                this.animeSlug, this.seasonNumber, this.episodeNumber, type
+            );
+            return override !== null ? override : coreSettings[CORE_SETTINGS_MAP.autoSkipIntro];
+        }
+
         setupAutoIntroSkip(player) {
-            if (!coreSettings[CORE_SETTINGS_MAP.autoSkipIntro]) return;
+            if (!this.isEpisodeSkipEnabled('intro')) return;
 
             let introHasBeenSkipped = false;
             let hasStartedPlaying = false;
 
             const checkInterval = setInterval(() => {
-                if (introHasBeenSkipped || !coreSettings[CORE_SETTINGS_MAP.autoSkipIntro]) {
+                if (introHasBeenSkipped || !this.isEpisodeSkipEnabled('intro')) {
                     clearInterval(checkInterval);
                     return;
                 }
@@ -4645,10 +4743,10 @@ const DEFAULT_SETTINGS_LAYOUT = {
         }
 
         setupAutoEdSkip(player) {
-            if (!coreSettings[CORE_SETTINGS_MAP.autoSkipIntro]) return; // reuse autoSkipIntro setting for now
+            if (!this.isEpisodeSkipEnabled('outro')) return;
             let edHasBeenSkipped = false;
             const checkInterval = setInterval(() => {
-                if (edHasBeenSkipped) { clearInterval(checkInterval); return; }
+                if (edHasBeenSkipped || !this.isEpisodeSkipEnabled('outro')) { clearInterval(checkInterval); return; }
                 if (!globalAniSkipData || !globalAniSkipData.outro) return;
                 const t = player.currentTime;
                 const { start, end } = globalAniSkipData.outro;
@@ -4790,7 +4888,7 @@ const DEFAULT_SETTINGS_LAYOUT = {
             this.setupDoubletapBehavior(player);
             this.setupHotkeys(player);
             if (advancedSettings[ADVANCED_SETTINGS_MAP.showSkipIntroButton]) {
-                setupSkipIntroButton(player);
+                setupSkipIntroButton(player, this);
                 setupSkipEdButton(player, this);
                 setupFallbackOutroSkipButton(player, this.messenger, this);
             }
@@ -5108,7 +5206,7 @@ const DEFAULT_SETTINGS_LAYOUT = {
             this.setupDoubletapBehavior(player);
             this.setupHotkeys(player);
             if (advancedSettings[ADVANCED_SETTINGS_MAP.showSkipIntroButton]) {
-                setupSkipIntroButton(player);
+                setupSkipIntroButton(player, this);
                 setupSkipEdButton(player, this);
                 setupFallbackOutroSkipButton(player, this.messenger, this);
             }
